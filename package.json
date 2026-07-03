@@ -1,0 +1,11 @@
+{
+  "name": "ai-read-map",
+  "private": true,
+  "workspaces": ["shared", "extension", "backend"],
+  "scripts": {
+    "dev:extension": "npm run dev -w extension",
+    "dev:backend": "npm run dev -w backend",
+    "build:extension": "npm run build -w extension",
+    "test": "npm run test -w shared && npm run test -w extension && npm run test -w backend"
+  }
+}
