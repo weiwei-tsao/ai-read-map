@@ -559,7 +559,7 @@ describe('assignParagraphIds', () => {
 
   it('assigns IDs to headings and paragraphs with enough text', () => {
     document.body.innerHTML = `
-      <h2>A real heading</h2>
+      <h2>A real heading with sufficient length</h2>
       <p>This paragraph has plenty of readable text in it, well past the minimum length.</p>
     `
     const idToNode = assignParagraphIds(document)
