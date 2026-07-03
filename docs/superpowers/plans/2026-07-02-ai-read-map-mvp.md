@@ -833,8 +833,15 @@ describe('checkExtractionQuality', () => {
   })
 
   it('fails when there are fewer than 5 paragraphs', () => {
-    const longText = 'word '.repeat(30)
-    const result = checkExtractionQuality(makeContent([longText, longText]))
+    const longText = 'word '.repeat(30) // 150 chars each
+    const result = checkExtractionQuality(makeContent([longText, longText, longText, longText]))
+    expect(result.passed).toBe(false)
+  })
+
+  it('fails when there are fewer than 3 meaningful blocks', () => {
+    const meaningfulText = 'word '.repeat(100) // 500 chars, >= 40-char bar
+    const shortText = 'a' // 1 char, < 40-char bar
+    const result = checkExtractionQuality(makeContent([meaningfulText, shortText, shortText, shortText, shortText]))
     expect(result.passed).toBe(false)
   })
 
