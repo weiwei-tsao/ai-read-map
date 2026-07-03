@@ -4,9 +4,9 @@
 
 **Goal:** Build the AI Read Map MVP end-to-end — a Chrome extension that extracts a webpage's readable content, sends it to a backend that calls Claude to generate a 2–5 section "read map," and lets the user jump to and highlight the original paragraph for each section.
 
-**Architecture:** npm-workspaces monorepo with two packages: `extension/` (Manifest V3 Chrome extension, Vite + CRXJS, vanilla TypeScript) and `backend/` (Node.js + Express + TypeScript API that calls the Anthropic API and never exposes the API key to the browser). The content script assigns stable IDs to DOM paragraphs/headings before running Mozilla's Readability extractor on a cloned document, so IDs survive extraction and can be used to scroll-and-highlight the original node later. The backend enforces a JSON schema on Claude's response via structured outputs, validates target IDs, caches by content hash, and rate-limits requests.
+**Architecture:** npm-workspaces monorepo with three packages: `shared/` (types + the target-ID validation function used by both other packages), `extension/` (Manifest V3 Chrome extension, Vite + CRXJS, vanilla TypeScript), and `backend/` (Node.js + Express + TypeScript API that calls the Anthropic API and never exposes the API key to the browser). The content script assigns stable IDs to DOM paragraphs/headings before running Mozilla's Readability extractor on a cloned document, so IDs survive extraction and can be used to scroll-and-highlight the original node later. The backend enforces a JSON schema on Claude's response via structured outputs, validates target IDs, caches by content hash, and rate-limits requests. `shared`'s `validateReadMap` is called twice — once backend-side (against the content that was sent) and once extension-side (against the live DOM) — because those are genuinely different checks against different sources of truth, not duplicated logic.
 
-**Tech Stack:** TypeScript everywhere. Extension: Vite, `@crxjs/vite-plugin`, `@mozilla/readability`, Vitest + jsdom. Backend: Express, `@anthropic-ai/sdk` (model `claude-haiku-4-5`), `express-rate-limit`, Vitest.
+**Tech Stack:** TypeScript everywhere, no build step for `shared` (consumed as TS source by both Vite and tsx). Extension: Vite, `@crxjs/vite-plugin`, `@mozilla/readability`, Vitest + jsdom. Backend: Express, `@anthropic-ai/sdk` (model `claude-haiku-4-5`), `express-rate-limit`, `tsx` (dev and run, no compile step), Vitest.
 
 **Scope note:** This plan covers Phases 1–5 of `docs/AI_Read_Map_MVP.md` (the core MVP). BYOK mode (spec §24) is explicitly a fast-follow and is out of scope here — the spec itself says it must not block the first private test.
 
@@ -21,6 +21,7 @@
 - Cache key: `domain + url + stable_content_hash + prompt_version`, computed over `title + heading hierarchy + paragraph text, in order`. (spec §16.1)
 - Free-mode model: `claude-haiku-4-5` (Anthropic, low-cost tier), called via `@anthropic-ai/sdk` with `output_config.format` structured JSON output — never assistant-turn prefill, never raw string parsing of unstructured output.
 - The UI must never render a Jump button that cannot resolve to a live DOM node — target-ID validation happens both backend-side (against the content that was sent) and extension-side (against the actual DOM), with the extension-side check being the final gate before rendering.
+- Shared logic (types, target-ID validation) lives in the `shared` workspace and is imported by both `extension` and `backend` — it is not duplicated in either package.
 
 ---
 
@@ -28,47 +29,51 @@
 
 ```
 ai-read-map/
-├── package.json                              # npm workspaces root
+├── package.json                              # npm workspaces root: shared, extension, backend
+├── shared/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── types.ts                          # StructuredPageContent, ReadMapResult, etc.
+│       ├── validate-read-map.ts               # target-ID validation (used by both consumers)
+│       ├── validate-read-map.test.ts
+│       └── index.ts                           # re-exports
 ├── extension/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── vitest.config.ts
 │   ├── vite.config.ts
 │   └── src/
-│       ├── manifest.ts                       # CRXJS manifest definition
-│       ├── shared/
-│       │   ├── types.ts                      # StructuredPageContent, ReadMapResult, etc.
-│       │   └── validate-target-ids.ts         # client-side target-ID validation gate
+│       ├── manifest.ts                        # CRXJS manifest definition
 │       ├── content/
-│       │   ├── dom-extract.ts                # assigns data-ai-read-map-id to DOM nodes
+│       │   ├── dom-extract.ts                 # assigns data-ai-read-map-id to DOM nodes
 │       │   ├── dom-extract.test.ts
-│       │   ├── readability-extract.ts        # clone + Readability + ID-preserving section build
-│       │   ├── quality-check.ts              # extraction minimums (spec §15.3)
+│       │   ├── readability-extract.ts         # clone + Readability + ID-preserving section build
+│       │   ├── readability-extract.test.ts
+│       │   ├── quality-check.ts                # extraction minimums (spec §15.3)
 │       │   ├── quality-check.test.ts
-│       │   └── index.ts                      # content-script entry: message handlers, jump/highlight
+│       │   └── index.ts                        # content-script entry: message handlers, jump/highlight
 │       ├── background/
-│       │   └── service-worker.ts             # orchestrates extract -> backend call -> validate
+│       │   └── service-worker.ts               # orchestrates extract -> backend call -> validate
 │       └── sidepanel/
 │           ├── index.html
-│           ├── panel.ts                      # render overview/sections/jump/copy, loading/error
+│           ├── panel.ts                        # render overview/sections/jump/copy, loading/error
 │           └── panel.css
 └── backend/
     ├── package.json
     ├── tsconfig.json
     ├── .env.example
     └── src/
-        ├── index.ts                          # Express app entry
-        ├── types.ts                          # mirrors extension shared types
+        ├── index.ts                            # Express app entry
         ├── routes/
-        │   └── readmap.ts                    # POST /api/readmap
+        │   └── readmap.ts                       # POST /api/readmap
         └── services/
-            ├── prompt.ts                     # prompt template (spec §13)
-            ├── anthropic-client.ts           # Claude call with structured output
-            ├── validate-output.ts            # backend-side target-ID validation
-            ├── validate-output.test.ts
+            ├── prompt.ts                        # prompt template (spec §13)
+            ├── anthropic-client.ts               # Claude call with structured output
+            ├── anthropic-client.test.ts
             ├── content-hash.ts
             ├── content-hash.test.ts
-            ├── cache.ts                      # in-memory cache, domain+url+hash+promptVersion key
+            ├── cache.ts                          # in-memory cache, domain+url+hash+promptVersion key
             └── cache.test.ts
 ```
 
@@ -81,7 +86,7 @@ ai-read-map/
 - Modify: `.gitignore`
 
 **Interfaces:**
-- Produces: an npm workspaces root that later tasks' `extension/` and `backend/` packages join.
+- Produces: an npm workspaces root that later tasks' `shared/`, `extension/`, and `backend/` packages join.
 
 - [ ] **Step 1: Create the root `package.json`**
 
@@ -89,12 +94,12 @@ ai-read-map/
 {
   "name": "ai-read-map",
   "private": true,
-  "workspaces": ["extension", "backend"],
+  "workspaces": ["shared", "extension", "backend"],
   "scripts": {
     "dev:extension": "npm run dev -w extension",
     "dev:backend": "npm run dev -w backend",
     "build:extension": "npm run build -w extension",
-    "test": "npm run test -w extension && npm run test -w backend"
+    "test": "npm run test -w shared && npm run test -w extension && npm run test -w backend"
   }
 }
 ```
@@ -118,7 +123,221 @@ git commit -m "chore: add npm workspaces root"
 
 ---
 
-### Task 2: Chrome Extension Skeleton (Vite + CRXJS, Manifest V3, Side Panel Shell)
+### Task 2: Shared Package — Types and Target-ID Validation
+
+**Files:**
+- Create: `shared/package.json`
+- Create: `shared/tsconfig.json`
+- Create: `shared/src/types.ts`
+- Test: `shared/src/validate-read-map.test.ts`
+- Create: `shared/src/validate-read-map.ts`
+- Create: `shared/src/index.ts`
+
+**Interfaces:**
+- Produces: `StructuredPageContent`, `SectionContent`, `ParagraphContent`, `ReadMapResult`, `KeySection` types, and `validateReadMap(result: ReadMapResult, validTargetIds: Set<string>): ReadMapResult`. Both are imported as `ai-read-map-shared` by `extension` (Tasks 5, 6, 10, 11) and `backend` (Tasks 8, 9).
+
+- [ ] **Step 1: Create `shared/package.json`**
+
+```json
+{
+  "name": "ai-read-map-shared",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
+```
+
+No build step — both consumers (Vite in `extension`, `tsx` in `backend`) transpile this package's TypeScript source directly wherever it's imported from. `ponytail:` skip a compiled `dist/` for this package; add one only if a consumer needs plain pre-compiled JS (e.g. a non-tsx/non-Vite deployment target).
+
+- [ ] **Step 2: Create `shared/tsconfig.json`**
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}
+```
+
+- [ ] **Step 3: Create `shared/src/types.ts`**
+
+```ts
+export interface ParagraphContent {
+  id: string
+  text: string
+}
+
+export interface SectionContent {
+  id: string
+  heading: string | null
+  paragraphs: ParagraphContent[]
+}
+
+export interface StructuredPageContent {
+  title: string
+  url: string
+  domain: string
+  sections: SectionContent[]
+}
+
+export interface KeySection {
+  label: string
+  whyRead: string
+  targetId: string
+}
+
+export interface ReadMapResult {
+  status: 'ok' | 'not_suitable' | 'low_confidence'
+  overview: string
+  keySections: KeySection[]
+  pageQuality: 'high' | 'medium' | 'low'
+  missingContext: string[]
+  reason: string
+}
+```
+
+- [ ] **Step 4: Write the failing test for `validateReadMap`**
+
+```ts
+// shared/src/validate-read-map.test.ts
+import { describe, it, expect } from 'vitest'
+import { validateReadMap } from './validate-read-map.js'
+import type { ReadMapResult } from './types.js'
+
+function makeResult(overrides: Partial<ReadMapResult> = {}): ReadMapResult {
+  return {
+    status: 'ok',
+    overview: 'Overview',
+    keySections: [
+      { label: 'A', whyRead: 'why', targetId: 'p1' },
+      { label: 'B', whyRead: 'why', targetId: 'p2' },
+    ],
+    pageQuality: 'high',
+    missingContext: [],
+    reason: '',
+    ...overrides,
+  }
+}
+
+describe('validateReadMap', () => {
+  it('passes through when all target IDs are valid', () => {
+    const result = validateReadMap(makeResult(), new Set(['p1', 'p2']))
+    expect(result.status).toBe('ok')
+    expect(result.keySections).toHaveLength(2)
+  })
+
+  it('drops invalid target IDs', () => {
+    const result = validateReadMap(
+      makeResult({
+        keySections: [
+          { label: 'A', whyRead: 'why', targetId: 'p1' },
+          { label: 'Fake', whyRead: 'why', targetId: 'does-not-exist' },
+          { label: 'C', whyRead: 'why', targetId: 'p2' },
+        ],
+      }),
+      new Set(['p1', 'p2']),
+    )
+    expect(result.keySections.map((s) => s.targetId)).toEqual(['p1', 'p2'])
+  })
+
+  it('drops duplicate target IDs, keeping the first', () => {
+    const result = validateReadMap(
+      makeResult({
+        keySections: [
+          { label: 'A', whyRead: 'why', targetId: 'p1' },
+          { label: 'A again', whyRead: 'why', targetId: 'p1' },
+        ],
+      }),
+      new Set(['p1']),
+    )
+    expect(result.keySections).toHaveLength(1)
+  })
+
+  it('downgrades to low_confidence when fewer than 2 valid sections remain', () => {
+    const result = validateReadMap(
+      makeResult({ keySections: [{ label: 'A', whyRead: 'why', targetId: 'p1' }] }),
+      new Set(['p1']),
+    )
+    expect(result.status).toBe('low_confidence')
+  })
+
+  it('leaves non-ok statuses untouched', () => {
+    const result = validateReadMap(makeResult({ status: 'not_suitable', keySections: [] }), new Set())
+    expect(result.status).toBe('not_suitable')
+  })
+})
+```
+
+- [ ] **Step 5: Run the test to verify it fails**
+
+Run: `npm run test -w shared`
+Expected: FAIL with "Cannot find module './validate-read-map.js'"
+
+- [ ] **Step 6: Create `shared/src/validate-read-map.ts`**
+
+```ts
+import type { ReadMapResult } from './types.js'
+
+export function validateReadMap(result: ReadMapResult, validTargetIds: Set<string>): ReadMapResult {
+  if (result.status !== 'ok') return result
+
+  const seen = new Set<string>()
+  const validSections = result.keySections.filter((section) => {
+    if (!validTargetIds.has(section.targetId)) return false
+    if (seen.has(section.targetId)) return false
+    seen.add(section.targetId)
+    return true
+  })
+
+  if (validSections.length < 2) {
+    return {
+      ...result,
+      status: 'low_confidence',
+      keySections: validSections,
+      reason: 'Not enough valid key sections after validation',
+    }
+  }
+
+  return { ...result, keySections: validSections }
+}
+```
+
+- [ ] **Step 7: Run the test to verify it passes**
+
+Run: `npm run test -w shared`
+Expected: PASS
+
+- [ ] **Step 8: Create `shared/src/index.ts`**
+
+```ts
+export * from './types.js'
+export * from './validate-read-map.js'
+```
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add shared package.json
+git commit -m "feat: add shared types and target-ID validation package"
+```
+
+---
+
+### Task 3: Chrome Extension Skeleton (Vite + CRXJS, Manifest V3, Side Panel Shell)
 
 **Files:**
 - Create: `extension/package.json`
@@ -131,7 +350,8 @@ git commit -m "chore: add npm workspaces root"
 - Create: `extension/src/background/service-worker.ts`
 
 **Interfaces:**
-- Produces: a loadable unpacked extension with a side panel that opens on icon click and shows a "Generate Read Map" button (wired up for real in Task 10/11).
+- Consumes: `ai-read-map-shared` (Task 2), via workspace dependency.
+- Produces: a loadable unpacked extension with a side panel that opens on icon click and shows a "Generate Read Map" button (wired up for real in Task 11/12).
 
 - [ ] **Step 1: Create `extension/package.json`**
 
@@ -146,7 +366,8 @@ git commit -m "chore: add npm workspaces root"
     "test": "vitest run"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.5.0"
+    "@mozilla/readability": "^0.5.0",
+    "ai-read-map-shared": "*"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",
@@ -216,7 +437,7 @@ export default defineManifest({
 })
 ```
 
-Note: the content script is declared here so it's present on every page (required for `chrome.tabs.sendMessage` to reach it), but it does no work until it receives an `EXTRACT_PAGE` message — passively registering a listener is not "processing the page," so this does not violate the manual-trigger constraint. `src/content/index.ts` is created in Task 9; Vite will fail to resolve it until then, which is expected at this step.
+Note: the content script is declared here so it's present on every page (required for `chrome.tabs.sendMessage` to reach it), but it does no work until it receives an `EXTRACT_PAGE` message — passively registering a listener is not "processing the page," so this does not violate the manual-trigger constraint. `src/content/index.ts` is created in Task 10; Vite will fail to resolve it until then, which is expected at this step.
 
 - [ ] **Step 5: Create `extension/vite.config.ts`**
 
@@ -268,7 +489,7 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(consol
 </html>
 ```
 
-- [ ] **Step 8: Create `extension/src/sidepanel/panel.ts` (stub, expanded in Task 11)**
+- [ ] **Step 8: Create `extension/src/sidepanel/panel.ts` (stub, expanded in Task 12)**
 
 ```ts
 const btn = document.querySelector<HTMLButtonElement>('#generate-btn')!
@@ -297,66 +518,28 @@ npm install
 npm run dev -w extension
 ```
 
-Expected: Vite starts without a fatal error about `src/content/index.ts` being unresolved is acceptable at this point (it doesn't exist yet) — if Vite hard-fails instead of just warning, stop and create an empty placeholder `extension/src/content/index.ts` with a single `export {}` line so the dev server can start; Task 9 will replace it.
+Expected: Vite starts without a fatal error about `src/content/index.ts` being unresolved is acceptable at this point (it doesn't exist yet) — if Vite hard-fails instead of just warning, stop and create an empty placeholder `extension/src/content/index.ts` with a single `export {}` line so the dev server can start; Task 10 will replace it.
 
 - [ ] **Step 11: Commit**
 
 ```bash
-git add extension package.json
+git add extension package.json package-lock.json
 git commit -m "feat: scaffold Chrome extension with Vite, CRXJS, and side panel shell"
 ```
 
 ---
 
-### Task 3: DOM Paragraph/Heading ID Assignment
+### Task 4: DOM Paragraph/Heading ID Assignment
 
 **Files:**
-- Create: `extension/src/shared/types.ts`
 - Create: `extension/src/content/dom-extract.ts`
 - Test: `extension/src/content/dom-extract.test.ts`
 
 **Interfaces:**
-- Produces: `assignParagraphIds(doc?: Document): Map<string, HTMLElement>` — sets `data-ai-read-map-id` on candidate paragraph/heading nodes in document order and returns the id→node map. Consumed by Task 4.
-- Produces: `resetIdCounter(): void` — test-only helper to make IDs deterministic across test runs.
+- Produces: `assignParagraphIds(doc?: Document): Map<string, HTMLElement>` — sets `data-ai-read-map-id` on candidate paragraph/heading nodes in document order and returns the id→node map. Consumed by Task 5.
+- Produces: `resetIdCounter(): void` — test-only helper to make IDs deterministic across test runs. Also used by Task 5's test.
 
-- [ ] **Step 1: Create `extension/src/shared/types.ts`**
-
-```ts
-export interface ParagraphContent {
-  id: string
-  text: string
-}
-
-export interface SectionContent {
-  id: string
-  heading: string | null
-  paragraphs: ParagraphContent[]
-}
-
-export interface StructuredPageContent {
-  title: string
-  url: string
-  domain: string
-  sections: SectionContent[]
-}
-
-export interface KeySection {
-  label: string
-  whyRead: string
-  targetId: string
-}
-
-export interface ReadMapResult {
-  status: 'ok' | 'not_suitable' | 'low_confidence'
-  overview: string
-  keySections: KeySection[]
-  pageQuality: 'high' | 'medium' | 'low'
-  missingContext: string[]
-  reason: string
-}
-```
-
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 1: Write the failing test**
 
 ```ts
 // extension/src/content/dom-extract.test.ts
@@ -433,27 +616,101 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add extension/src/shared/types.ts extension/src/content/dom-extract.ts extension/src/content/dom-extract.test.ts
+git add extension/src/content/dom-extract.ts extension/src/content/dom-extract.test.ts
 git commit -m "feat: assign stable IDs to paragraph and heading DOM nodes"
 ```
 
 ---
 
-### Task 4: Readability-Based Structured Extraction (ID-Preserving)
+### Task 5: Readability-Based Structured Extraction (ID-Preserving)
 
 **Files:**
 - Create: `extension/src/content/readability-extract.ts`
+- Test: `extension/src/content/readability-extract.test.ts`
 
 **Interfaces:**
-- Consumes: `assignParagraphIds` from Task 3 (`extension/src/content/dom-extract.ts`).
-- Produces: `extractStructuredContent(doc?: Document): StructuredPageContent` — the function Task 9's content script calls on `EXTRACT_PAGE`.
+- Consumes: `assignParagraphIds`, `resetIdCounter` from Task 4 (`extension/src/content/dom-extract.ts`); `StructuredPageContent` from `ai-read-map-shared` (Task 2).
+- Produces: `extractStructuredContent(doc?: Document): StructuredPageContent` — the function Task 10's content script calls on `EXTRACT_PAGE`.
 
-- [ ] **Step 1: Create `extension/src/content/readability-extract.ts`**
+- [ ] **Step 1: Write the failing test, mocking `@mozilla/readability`**
+
+The real Readability library's DOM-cloning and parsing behavior is what would make a test of *its* output flaky under jsdom. Mock it so this test verifies *our* ID-preserving grouping logic deterministically instead.
+
+```ts
+// extension/src/content/readability-extract.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { resetIdCounter } from './dom-extract'
+
+vi.mock('@mozilla/readability', () => ({
+  Readability: vi.fn(),
+}))
+
+import { Readability } from '@mozilla/readability'
+import { extractStructuredContent } from './readability-extract'
+
+function setParseResult(contentHtml: string | null, title = 'Mock Title') {
+  ;(Readability as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+    parse: () => (contentHtml === null ? null : { content: contentHtml, title }),
+  }))
+}
+
+describe('extractStructuredContent', () => {
+  beforeEach(() => {
+    resetIdCounter()
+    document.body.innerHTML = ''
+  })
+
+  it('groups paragraphs under the preceding heading, using only surviving IDs', () => {
+    document.body.innerHTML = `
+      <h2>Section One</h2>
+      <p>First paragraph has plenty of readable text in it for the test to work.</p>
+      <p>Second paragraph also has plenty of readable text in it for the test.</p>
+      <nav><p>This nav paragraph is long enough but excluded before Readability even runs.</p></nav>
+    `
+    // IDs are assigned in document order starting at ai-read-map-0 (reset in
+    // beforeEach): h2 -> ai-read-map-0, first <p> -> ai-read-map-1, second
+    // <p> -> ai-read-map-2. The nav <p> never gets an ID (excluded by
+    // assignParagraphIds itself). Simulate Readability keeping only the
+    // heading and the first paragraph.
+    setParseResult(
+      '<div data-ai-read-map-id="ai-read-map-0"></div><div data-ai-read-map-id="ai-read-map-1"></div>',
+    )
+
+    const result = extractStructuredContent(document)
+
+    expect(result.title).toBe('Mock Title')
+    expect(result.sections).toHaveLength(1)
+    expect(result.sections[0].heading).toBe('Section One')
+    expect(result.sections[0].paragraphs).toHaveLength(1)
+    expect(result.sections[0].paragraphs[0].text).toContain('First paragraph')
+  })
+
+  it('falls back to every assigned ID when Readability finds nothing', () => {
+    document.body.innerHTML = `
+      <h2>Section One</h2>
+      <p>First paragraph has plenty of readable text in it for the test to work.</p>
+    `
+    setParseResult(null)
+
+    const result = extractStructuredContent(document)
+
+    expect(result.sections).toHaveLength(1)
+    expect(result.sections[0].paragraphs).toHaveLength(1)
+  })
+})
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npm run test -w extension`
+Expected: FAIL with "Cannot find module './readability-extract'"
+
+- [ ] **Step 3: Create `extension/src/content/readability-extract.ts`**
 
 ```ts
 import { Readability } from '@mozilla/readability'
 import { assignParagraphIds } from './dom-extract'
-import type { StructuredPageContent, SectionContent, ParagraphContent } from '../shared/types'
+import type { StructuredPageContent, SectionContent, ParagraphContent } from 'ai-read-map-shared'
 
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
 
@@ -508,32 +765,35 @@ export function extractStructuredContent(doc: Document = document): StructuredPa
 }
 ```
 
-- [ ] **Step 2: Manual verification**
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run: `npm run test -w extension`
+Expected: PASS
+
+- [ ] **Step 5: Install dependencies (picks up `@mozilla/readability` and the `ai-read-map-shared` workspace link)**
 
 ```bash
 npm install
 ```
 
-There is no unit test here — Readability's DOM-cloning behavior under jsdom is flaky enough that a unit test would mostly test jsdom, not this code. Task 9's content-script integration and the manual E2E check in Task 12 are this function's real check.
-
-- [ ] **Step 3: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add extension/src/content/readability-extract.ts extension/package.json extension/package-lock.json
+git add extension/src/content/readability-extract.ts extension/src/content/readability-extract.test.ts extension/package.json package-lock.json
 git commit -m "feat: extract structured page content while preserving paragraph IDs"
 ```
 
 ---
 
-### Task 5: Extraction Quality Checks
+### Task 6: Extraction Quality Checks
 
 **Files:**
 - Create: `extension/src/content/quality-check.ts`
 - Test: `extension/src/content/quality-check.test.ts`
 
 **Interfaces:**
-- Consumes: `StructuredPageContent` from `extension/src/shared/types.ts`.
-- Produces: `checkExtractionQuality(content: StructuredPageContent): { passed: boolean; reason?: string }` — consumed by Task 9's content script and Task 10's background worker.
+- Consumes: `StructuredPageContent` from `ai-read-map-shared` (Task 2).
+- Produces: `checkExtractionQuality(content: StructuredPageContent): { passed: boolean; reason?: string }` — consumed by Task 10's content script and Task 11's background worker.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -541,7 +801,7 @@ git commit -m "feat: extract structured page content while preserving paragraph 
 // extension/src/content/quality-check.test.ts
 import { describe, it, expect } from 'vitest'
 import { checkExtractionQuality } from './quality-check'
-import type { StructuredPageContent } from '../shared/types'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 function makeContent(paragraphTexts: string[]): StructuredPageContent {
   return {
@@ -556,7 +816,7 @@ describe('checkExtractionQuality', () => {
   it('fails when total text is under 500 characters', () => {
     const result = checkExtractionQuality(makeContent(['short'.repeat(10)]))
     expect(result.passed).toBe(false)
-    expect(result.reason).toMatch(/too short/i)
+    expect(result.reason).toMatch(/couldn't find enough readable content/i)
   })
 
   it('fails when there are fewer than 5 paragraphs', () => {
@@ -581,7 +841,7 @@ Expected: FAIL with "Cannot find module './quality-check'"
 - [ ] **Step 3: Create `extension/src/content/quality-check.ts`**
 
 ```ts
-import type { StructuredPageContent } from '../shared/types'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 export interface ExtractionQualityResult {
   passed: boolean
@@ -625,17 +885,17 @@ git commit -m "feat: add extraction quality checks per MVP minimums"
 
 ---
 
-### Task 6: Backend Skeleton (Express + TypeScript)
+### Task 7: Backend Skeleton (Express + TypeScript)
 
 **Files:**
 - Create: `backend/package.json`
 - Create: `backend/tsconfig.json`
 - Create: `backend/.env.example`
-- Create: `backend/src/types.ts`
 - Create: `backend/src/index.ts`
 
 **Interfaces:**
-- Produces: a running Express server with `GET /health`, ready for Task 8 to add `POST /api/readmap`.
+- Consumes: `ai-read-map-shared` (Task 2), via workspace dependency.
+- Produces: a running Express server with `GET /health`, ready for Task 9 to add `POST /api/readmap`.
 
 - [ ] **Step 1: Create `backend/package.json`**
 
@@ -646,12 +906,13 @@ git commit -m "feat: add extraction quality checks per MVP minimums"
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.35.0",
+    "ai-read-map-shared": "*",
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0"
   },
@@ -665,6 +926,8 @@ git commit -m "feat: add extraction quality checks per MVP minimums"
 }
 ```
 
+No compiled `dist/` build for this MVP — `tsx` runs TypeScript directly in both dev and "production" (the private-test deployment target). `ponytail:` add a real `tsc` build step when deploying somewhere that specifically wants plain Node without `tsx` as a runtime dependency.
+
 - [ ] **Step 2: Create `backend/tsconfig.json`**
 
 ```json
@@ -673,10 +936,10 @@ git commit -m "feat: add extraction quality checks per MVP minimums"
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "outDir": "dist",
     "strict": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "noEmit": true
   },
   "include": ["src"]
 }
@@ -689,46 +952,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 PORT=8787
 ```
 
-- [ ] **Step 4: Create `backend/src/types.ts`**
-
-```ts
-export interface ParagraphContent {
-  id: string
-  text: string
-}
-
-export interface SectionContent {
-  id: string
-  heading: string | null
-  paragraphs: ParagraphContent[]
-}
-
-export interface StructuredPageContent {
-  title: string
-  url: string
-  domain: string
-  sections: SectionContent[]
-}
-
-export interface KeySection {
-  label: string
-  whyRead: string
-  targetId: string
-}
-
-export interface ReadMapResult {
-  status: 'ok' | 'not_suitable' | 'low_confidence'
-  overview: string
-  keySections: KeySection[]
-  pageQuality: 'high' | 'medium' | 'low'
-  missingContext: string[]
-  reason: string
-}
-```
-
-This intentionally mirrors `extension/src/shared/types.ts`. `ponytail:` two packages, one small duplicated type file — not worth a shared npm package at MVP scale; extract one if the types drift and cause a bug.
-
-- [ ] **Step 5: Create `backend/src/index.ts`**
+- [ ] **Step 4: Create `backend/src/index.ts`**
 
 ```ts
 import express from 'express'
@@ -742,7 +966,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8787
 app.listen(PORT, () => console.log(`ai-read-map backend listening on :${PORT}`))
 ```
 
-- [ ] **Step 6: Verify the server starts**
+- [ ] **Step 5: Verify the server starts**
 
 ```bash
 npm install
@@ -753,7 +977,7 @@ curl http://localhost:8787/health
 
 Expected: `{"status":"ok"}`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend package.json package-lock.json
@@ -762,20 +986,21 @@ git commit -m "feat: scaffold Express backend"
 
 ---
 
-### Task 7: Anthropic Integration — Prompt and Structured Read Map Generation
+### Task 8: Anthropic Integration — Prompt and Structured Read Map Generation
 
 **Files:**
 - Create: `backend/src/services/prompt.ts`
 - Create: `backend/src/services/anthropic-client.ts`
+- Test: `backend/src/services/anthropic-client.test.ts`
 
 **Interfaces:**
-- Consumes: `StructuredPageContent` from `backend/src/types.ts`.
-- Produces: `generateReadMap(content: StructuredPageContent): Promise<ReadMapResult>` and `PROMPT_VERSION: string`, both consumed by Task 8's route.
+- Consumes: `StructuredPageContent`, `ReadMapResult` from `ai-read-map-shared` (Task 2).
+- Produces: `generateReadMap(content: StructuredPageContent): Promise<ReadMapResult>` and `PROMPT_VERSION: string`, both consumed by Task 9's route.
 
 - [ ] **Step 1: Create `backend/src/services/prompt.ts`**
 
 ```ts
-import type { StructuredPageContent } from '../types.js'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 export const PROMPT_VERSION = 'v1'
 
@@ -824,12 +1049,78 @@ ${JSON.stringify(content)}`
 }
 ```
 
-- [ ] **Step 2: Create `backend/src/services/anthropic-client.ts`**
+- [ ] **Step 2: Write the failing test for `generateReadMap`, mocking `@anthropic-ai/sdk`**
+
+Mocking the SDK isolates this test to *our* request shape and response parsing — not the network call or Claude's actual output, which the manual `curl` check in Task 9 covers.
+
+```ts
+// backend/src/services/anthropic-client.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const mockCreate = vi.fn()
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    messages: { create: mockCreate },
+  })),
+}))
+
+import { generateReadMap } from './anthropic-client.js'
+import type { StructuredPageContent } from 'ai-read-map-shared'
+
+const content: StructuredPageContent = {
+  title: 'Test',
+  url: 'https://example.com',
+  domain: 'example.com',
+  sections: [],
+}
+
+describe('generateReadMap', () => {
+  beforeEach(() => mockCreate.mockReset())
+
+  it('parses the text block into a ReadMapResult', async () => {
+    mockCreate.mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: 'ok',
+            overview: 'x',
+            keySections: [],
+            pageQuality: 'high',
+            missingContext: [],
+            reason: '',
+          }),
+        },
+      ],
+    })
+
+    const result = await generateReadMap(content)
+
+    expect(result.status).toBe('ok')
+    expect(result.overview).toBe('x')
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-haiku-4-5' }))
+  })
+
+  it('throws when the response has no text block', async () => {
+    mockCreate.mockResolvedValue({ content: [] })
+
+    await expect(generateReadMap(content)).rejects.toThrow('no text content')
+  })
+})
+```
+
+- [ ] **Step 3: Run the test to verify it fails**
+
+Run: `npm run test -w backend`
+Expected: FAIL with "Cannot find module './anthropic-client.js'"
+
+- [ ] **Step 4: Create `backend/src/services/anthropic-client.ts`**
 
 ```ts
 import Anthropic from '@anthropic-ai/sdk'
 import { buildPrompt } from './prompt.js'
-import type { StructuredPageContent, ReadMapResult } from '../types.js'
+import type { StructuredPageContent, ReadMapResult } from 'ai-read-map-shared'
 
 const client = new Anthropic()
 
@@ -876,51 +1167,43 @@ export async function generateReadMap(content: StructuredPageContent): Promise<R
 }
 ```
 
-`output_config.format` with a JSON schema guarantees Claude's response is valid JSON matching this shape (structured outputs), so `JSON.parse` here cannot throw on malformed JSON — it can still throw if the API itself errors, which the route in Task 8 catches.
+`output_config.format` with a JSON schema guarantees Claude's response is valid JSON matching this shape (structured outputs), so `JSON.parse` here cannot throw on malformed JSON — it can still throw if the API itself errors, which the route in Task 9 catches.
 
-- [ ] **Step 3: Manual verification**
+- [ ] **Step 5: Run the test to verify it passes**
 
-```bash
-npm install
-node --input-type=module -e "
-import { generateReadMap } from './backend/dist/services/anthropic-client.js'
-" # skip if dist/ doesn't exist yet — real verification happens via Task 8's endpoint
-```
+Run: `npm run test -w backend`
+Expected: PASS
 
-There's no isolated unit test for this module — it's a thin wrapper around a live API call, and mocking the Anthropic SDK's response shape would mostly test the mock. Task 8's manual `curl` verification against a live page is this module's real check.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/services/prompt.ts backend/src/services/anthropic-client.ts backend/package.json backend/package-lock.json
+git add backend/src/services/prompt.ts backend/src/services/anthropic-client.ts backend/src/services/anthropic-client.test.ts backend/package.json package-lock.json
 git commit -m "feat: generate structured read maps via Claude"
 ```
 
 ---
 
-### Task 8: Read Map Endpoint — Cache, Validation, Rate Limiting, Error Handling
+### Task 9: Read Map Endpoint — Cache, Validation, Rate Limiting, Error Handling
 
 **Files:**
 - Create: `backend/src/services/content-hash.ts`
 - Test: `backend/src/services/content-hash.test.ts`
 - Create: `backend/src/services/cache.ts`
 - Test: `backend/src/services/cache.test.ts`
-- Create: `backend/src/services/validate-output.ts`
-- Test: `backend/src/services/validate-output.test.ts`
 - Create: `backend/src/routes/readmap.ts`
 - Modify: `backend/src/index.ts`
 
 **Interfaces:**
-- Consumes: `generateReadMap`, `PROMPT_VERSION` from Task 7.
-- Produces: `POST /api/readmap` — accepts a `StructuredPageContent` body, returns a `ReadMapResult`. Consumed by Task 10's background worker.
+- Consumes: `generateReadMap`, `PROMPT_VERSION` from Task 8; `validateReadMap` from `ai-read-map-shared` (Task 2).
+- Produces: `POST /api/readmap` — accepts a `StructuredPageContent` body, returns a `ReadMapResult`. Consumed by Task 11's background worker.
 
 - [ ] **Step 1: Write the failing test for content hashing**
 
 ```ts
 // backend/src/services/content-hash.test.ts
 import { describe, it, expect } from 'vitest'
-import { computeContentHash } from './content-hash'
-import type { StructuredPageContent } from '../types'
+import { computeContentHash } from './content-hash.js'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 const base: StructuredPageContent = {
   title: 'Title',
@@ -952,13 +1235,13 @@ describe('computeContentHash', () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `npm run test -w backend`
-Expected: FAIL with "Cannot find module './content-hash'"
+Expected: FAIL with "Cannot find module './content-hash.js'"
 
 - [ ] **Step 3: Create `backend/src/services/content-hash.ts`**
 
 ```ts
 import { createHash } from 'node:crypto'
-import type { StructuredPageContent } from '../types.js'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 export function computeContentHash(content: StructuredPageContent): string {
   const stable = {
@@ -982,8 +1265,8 @@ Expected: PASS
 ```ts
 // backend/src/services/cache.test.ts
 import { describe, it, expect } from 'vitest'
-import { buildCacheKey, getCached, setCached } from './cache'
-import type { ReadMapResult } from '../types'
+import { buildCacheKey, getCached, setCached } from './cache.js'
+import type { ReadMapResult } from 'ai-read-map-shared'
 
 const readMap: ReadMapResult = {
   status: 'ok',
@@ -1014,12 +1297,12 @@ describe('cache', () => {
 - [ ] **Step 6: Run to verify it fails**
 
 Run: `npm run test -w backend`
-Expected: FAIL with "Cannot find module './cache'"
+Expected: FAIL with "Cannot find module './cache.js'"
 
 - [ ] **Step 7: Create `backend/src/services/cache.ts`**
 
 ```ts
-import type { ReadMapResult } from '../types.js'
+import type { ReadMapResult } from 'ai-read-map-shared'
 
 interface CacheEntry {
   value: ReadMapResult
@@ -1056,127 +1339,16 @@ export function setCached(key: string, value: ReadMapResult): void {
 Run: `npm run test -w backend`
 Expected: PASS
 
-- [ ] **Step 9: Write the failing test for target-ID validation**
-
-```ts
-// backend/src/services/validate-output.test.ts
-import { describe, it, expect } from 'vitest'
-import { validateReadMap } from './validate-output'
-import type { ReadMapResult } from '../types'
-
-function makeResult(overrides: Partial<ReadMapResult> = {}): ReadMapResult {
-  return {
-    status: 'ok',
-    overview: 'Overview',
-    keySections: [
-      { label: 'A', whyRead: 'why', targetId: 'p1' },
-      { label: 'B', whyRead: 'why', targetId: 'p2' },
-    ],
-    pageQuality: 'high',
-    missingContext: [],
-    reason: '',
-    ...overrides,
-  }
-}
-
-describe('validateReadMap', () => {
-  it('passes through when all target IDs are valid', () => {
-    const result = validateReadMap(makeResult(), new Set(['p1', 'p2']))
-    expect(result.status).toBe('ok')
-    expect(result.keySections).toHaveLength(2)
-  })
-
-  it('drops invalid target IDs', () => {
-    const result = validateReadMap(
-      makeResult({
-        keySections: [
-          { label: 'A', whyRead: 'why', targetId: 'p1' },
-          { label: 'Fake', whyRead: 'why', targetId: 'does-not-exist' },
-          { label: 'C', whyRead: 'why', targetId: 'p2' },
-        ],
-      }),
-      new Set(['p1', 'p2']),
-    )
-    expect(result.keySections.map((s) => s.targetId)).toEqual(['p1', 'p2'])
-  })
-
-  it('drops duplicate target IDs, keeping the first', () => {
-    const result = validateReadMap(
-      makeResult({
-        keySections: [
-          { label: 'A', whyRead: 'why', targetId: 'p1' },
-          { label: 'A again', whyRead: 'why', targetId: 'p1' },
-        ],
-      }),
-      new Set(['p1']),
-    )
-    expect(result.keySections).toHaveLength(1)
-  })
-
-  it('downgrades to low_confidence when fewer than 2 valid sections remain', () => {
-    const result = validateReadMap(
-      makeResult({ keySections: [{ label: 'A', whyRead: 'why', targetId: 'p1' }] }),
-      new Set(['p1']),
-    )
-    expect(result.status).toBe('low_confidence')
-  })
-
-  it('leaves non-ok statuses untouched', () => {
-    const result = validateReadMap(makeResult({ status: 'not_suitable', keySections: [] }), new Set())
-    expect(result.status).toBe('not_suitable')
-  })
-})
-```
-
-- [ ] **Step 10: Run to verify it fails**
-
-Run: `npm run test -w backend`
-Expected: FAIL with "Cannot find module './validate-output'"
-
-- [ ] **Step 11: Create `backend/src/services/validate-output.ts`**
-
-```ts
-import type { ReadMapResult } from '../types.js'
-
-export function validateReadMap(result: ReadMapResult, validTargetIds: Set<string>): ReadMapResult {
-  if (result.status !== 'ok') return result
-
-  const seen = new Set<string>()
-  const validSections = result.keySections.filter((section) => {
-    if (!validTargetIds.has(section.targetId)) return false
-    if (seen.has(section.targetId)) return false
-    seen.add(section.targetId)
-    return true
-  })
-
-  if (validSections.length < 2) {
-    return {
-      ...result,
-      status: 'low_confidence',
-      keySections: validSections,
-      reason: 'Not enough valid key sections after validation',
-    }
-  }
-
-  return { ...result, keySections: validSections }
-}
-```
-
-- [ ] **Step 12: Run to verify it passes**
-
-Run: `npm run test -w backend`
-Expected: PASS
-
-- [ ] **Step 13: Create `backend/src/routes/readmap.ts`**
+- [ ] **Step 9: Create `backend/src/routes/readmap.ts`**
 
 ```ts
 import { Router } from 'express'
 import { generateReadMap } from '../services/anthropic-client.js'
-import { validateReadMap } from '../services/validate-output.js'
 import { computeContentHash } from '../services/content-hash.js'
 import { buildCacheKey, getCached, setCached } from '../services/cache.js'
 import { PROMPT_VERSION } from '../services/prompt.js'
-import type { StructuredPageContent } from '../types.js'
+import { validateReadMap } from 'ai-read-map-shared'
+import type { StructuredPageContent } from 'ai-read-map-shared'
 
 const MAX_CONTENT_CHARS = 50_000
 
@@ -1221,7 +1393,7 @@ readmapRouter.post('/readmap', async (req, res) => {
 })
 ```
 
-- [ ] **Step 14: Wire the router and rate limiting into `backend/src/index.ts`**
+- [ ] **Step 10: Wire the router and rate limiting into `backend/src/index.ts`**
 
 ```ts
 import express from 'express'
@@ -1240,7 +1412,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 8787
 app.listen(PORT, () => console.log(`ai-read-map backend listening on :${PORT}`))
 ```
 
-- [ ] **Step 15: Manual verification against a live page**
+- [ ] **Step 11: Manual verification against a live page**
 
 ```bash
 npm run dev -w backend
@@ -1266,7 +1438,7 @@ curl -X POST http://localhost:8787/api/readmap \
 
 Expected: a JSON response with `status: "ok"`, an `overview`, and 2–5 `keySections` whose `targetId`s are all drawn from `p1`–`p5`.
 
-- [ ] **Step 16: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add backend/src/services backend/src/routes backend/src/index.ts
@@ -1275,21 +1447,20 @@ git commit -m "feat: add read map endpoint with caching, validation, and rate li
 
 ---
 
-### Task 9: Content Script — Message Handlers and Jump/Highlight
+### Task 10: Content Script — Message Handlers and Jump/Highlight
 
 **Files:**
 - Create: `extension/src/content/index.ts`
 
 **Interfaces:**
-- Consumes: `extractStructuredContent` (Task 4), `checkExtractionQuality` (Task 5).
-- Produces: content script responding to `chrome.runtime` messages `EXTRACT_PAGE` (returns `{ content, quality }`) and `JUMP_TO_PARAGRAPH` (scrolls and highlights). Consumed by Task 10's background worker.
+- Consumes: `extractStructuredContent` (Task 5), `checkExtractionQuality` (Task 6).
+- Produces: content script responding to `chrome.runtime` messages `EXTRACT_PAGE` (returns `{ content, quality }`) and `JUMP_TO_PARAGRAPH` (scrolls and highlights). Consumed by Task 11's background worker.
 
 - [ ] **Step 1: Create `extension/src/content/index.ts`**
 
 ```ts
 import { extractStructuredContent } from './readability-extract'
 import { checkExtractionQuality } from './quality-check'
-import type { StructuredPageContent } from '../shared/types'
 
 let lastIdToNode: Map<string, HTMLElement> | null = null
 let highlightTimeout: number | undefined
@@ -1337,11 +1508,11 @@ function jumpToParagraph(targetId: string): void {
 }
 ```
 
-Note: `extractStructuredContent` already calls `assignParagraphIds` internally (Task 4), so `collectIdToNode` here just re-queries the now-tagged DOM rather than re-deriving IDs — this keeps a single source of truth for ID assignment.
+Note: `extractStructuredContent` already calls `assignParagraphIds` internally (Task 5), so `collectIdToNode` here just re-queries the now-tagged DOM rather than re-deriving IDs — this keeps a single source of truth for ID assignment.
 
-- [ ] **Step 2: If Task 2's placeholder file exists, remove it**
+- [ ] **Step 2: If Task 3's placeholder file exists, remove it**
 
-If `extension/src/content/index.ts` previously contained only `export {}` from Task 2 Step 10, this step's content replaces it — no separate deletion needed.
+If `extension/src/content/index.ts` previously contained only `export {}` from Task 3 Step 10, this step's content replaces it — no separate deletion needed.
 
 - [ ] **Step 3: Manual verification**
 
@@ -1360,54 +1531,20 @@ git commit -m "feat: wire content script extraction and jump/highlight messaging
 
 ---
 
-### Task 10: Background Service Worker — Orchestration and Client-Side Validation
+### Task 11: Background Service Worker — Orchestration and Client-Side Validation
 
 **Files:**
-- Create: `extension/src/shared/validate-target-ids.ts`
 - Modify: `extension/src/background/service-worker.ts`
 
 **Interfaces:**
-- Consumes: `StructuredPageContent`, `ReadMapResult` from `extension/src/shared/types.ts`.
-- Produces: `chrome.runtime` message handler for `GENERATE_READMAP` (returns `{ ok: true, readMap } | { ok: false, error }`) and forwards `JUMP_TO_PARAGRAPH` to the active tab. Consumed by Task 11's side panel.
+- Consumes: `StructuredPageContent`, `ReadMapResult`, `validateReadMap` from `ai-read-map-shared` (Task 2).
+- Produces: `chrome.runtime` message handler for `GENERATE_READMAP` (returns `{ ok: true, readMap } | { ok: false, error }`) and forwards `JUMP_TO_PARAGRAPH` to the active tab. Consumed by Task 12's side panel.
 
-- [ ] **Step 1: Create `extension/src/shared/validate-target-ids.ts`**
-
-```ts
-import type { ReadMapResult } from './types'
-
-// Mirrors backend/src/services/validate-output.ts. ponytail: kept as a small
-// duplicate rather than a shared package — this is the extension's own gate
-// against the *live DOM*, which only the extension can check; the backend's
-// copy validates against what it was sent, which is a different, earlier check.
-export function validateReadMap(result: ReadMapResult, validTargetIds: Set<string>): ReadMapResult {
-  if (result.status !== 'ok') return result
-
-  const seen = new Set<string>()
-  const validSections = result.keySections.filter((section) => {
-    if (!validTargetIds.has(section.targetId)) return false
-    if (seen.has(section.targetId)) return false
-    seen.add(section.targetId)
-    return true
-  })
-
-  if (validSections.length < 2) {
-    return {
-      ...result,
-      status: 'low_confidence',
-      keySections: validSections,
-      reason: 'Not enough valid key sections after validation',
-    }
-  }
-
-  return { ...result, keySections: validSections }
-}
-```
-
-- [ ] **Step 2: Replace `extension/src/background/service-worker.ts`**
+- [ ] **Step 1: Replace `extension/src/background/service-worker.ts`**
 
 ```ts
-import { validateReadMap } from '../shared/validate-target-ids'
-import type { StructuredPageContent, ReadMapResult } from '../shared/types'
+import { validateReadMap } from 'ai-read-map-shared'
+import type { StructuredPageContent, ReadMapResult } from 'ai-read-map-shared'
 
 const BACKEND_URL = 'http://localhost:8787/api/readmap'
 
@@ -1470,31 +1607,31 @@ async function requestReadMap(content: StructuredPageContent): Promise<ReadMapRe
 }
 ```
 
-- [ ] **Step 3: Manual verification**
+- [ ] **Step 2: Manual verification**
 
-With the backend running (`npm run dev -w backend`) and the extension reloaded in `chrome://extensions`, open a long article page, open the side panel, and click "Generate Read Map" (still a no-op stub in the panel until Task 11 — verify instead via the service worker's console: `chrome://extensions` → "service worker" link → console). Sending `chrome.runtime.sendMessage({type: 'GENERATE_READMAP'})` from that console should log `read_map_requested` and eventually resolve with `{ok: true, readMap: {...}}`.
+With the backend running (`npm run dev -w backend`) and the extension reloaded in `chrome://extensions`, open a long article page. Open the service worker's console (`chrome://extensions` → "service worker" link) and run `chrome.runtime.sendMessage({type: 'GENERATE_READMAP'})`. Expected: logs `read_map_requested`, then resolves with `{ok: true, readMap: {...}}` (or `{ok: false, error: ...}` on an unsuitable page).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add extension/src/shared/validate-target-ids.ts extension/src/background/service-worker.ts
+git add extension/src/background/service-worker.ts
 git commit -m "feat: orchestrate generate flow with client-side target-ID validation"
 ```
 
 ---
 
-### Task 11: Side Panel UI — Overview, Key Sections, Jump, Copy, Loading/Error States
+### Task 12: Side Panel UI — Overview, Key Sections, Jump, Copy, Loading/Error States
 
 **Files:**
 - Modify: `extension/src/sidepanel/panel.ts`
 
 **Interfaces:**
-- Consumes: `chrome.runtime.sendMessage({type: 'GENERATE_READMAP'})` and `{type: 'JUMP_TO_PARAGRAPH', targetId}` from Task 10.
+- Consumes: `chrome.runtime.sendMessage({type: 'GENERATE_READMAP'})` and `{type: 'JUMP_TO_PARAGRAPH', targetId}` from Task 11; `ReadMapResult` from `ai-read-map-shared` (Task 2).
 
 - [ ] **Step 1: Replace `extension/src/sidepanel/panel.ts`**
 
 ```ts
-import type { ReadMapResult } from '../shared/types'
+import type { ReadMapResult } from 'ai-read-map-shared'
 
 const generateBtn = document.querySelector<HTMLButtonElement>('#generate-btn')!
 const statusEl = document.querySelector<HTMLDivElement>('#status')!
@@ -1605,7 +1742,7 @@ git commit -m "feat: render read map with jump, copy, and loading/error states"
 
 ---
 
-### Task 12: Final Verification Pass
+### Task 13: Final Verification Pass
 
 **Files:** None — this task only runs existing code and checks it against the spec's acceptance criteria (spec §21).
 
@@ -1615,7 +1752,7 @@ git commit -m "feat: render read map with jump, copy, and loading/error states"
 npm run test
 ```
 
-Expected: all Vitest suites (extension: `dom-extract`, `quality-check`; backend: `content-hash`, `cache`, `validate-output`) pass.
+Expected: all Vitest suites pass — `shared` (`validate-read-map`), `extension` (`dom-extract`, `readability-extract`, `quality-check`), `backend` (`content-hash`, `cache`, `anthropic-client`).
 
 - [ ] **Step 2: Run both dev servers together**
 
@@ -1624,14 +1761,14 @@ npm run dev:backend   # terminal 1
 npm run dev:extension # terminal 2
 ```
 
-Load the extension unpacked, and repeat the manual E2E flow from Task 11 Step 2 against at least two different domains (e.g. a news article and a technical documentation page) to sanity-check extraction across page shapes, per spec §23.1's mitigation of "start with article-like pages, track failed pages."
+Load the extension unpacked, and repeat the manual E2E flow from Task 12 Step 2 against at least two different domains (e.g. a news article and a technical documentation page) to sanity-check extraction across page shapes, per spec §23.1's mitigation of "start with article-like pages, track failed pages."
 
 - [ ] **Step 3: Check spec acceptance criteria (spec §21)**
 
 Confirm each of the following manually:
 - The extension extracts title, headings, and paragraphs and assigns IDs.
-- Every rendered Jump button resolves to a real DOM node (Task 10's `validateReadMap` gate).
-- The backend never returns a broken JSON shape (structured outputs in Task 7 enforce this).
+- Every rendered Jump button resolves to a real DOM node (Task 11's `validateReadMap` gate).
+- The backend never returns a broken JSON shape (structured outputs in Task 8 enforce this).
 - Output stays grounded — spot-check that `whyRead` text references only what's in the page, not outside knowledge.
 - A `not_suitable` page (e.g. a login page or search results page) shows a graceful message, not a crash.
 - The `ANTHROPIC_API_KEY` never appears in any extension file, network request from the extension, or `extension/dist` build output — grep the built extension bundle to confirm: `grep -r "sk-ant" extension/dist` should return nothing.
@@ -1642,6 +1779,7 @@ Confirm each of the following manually:
 
 ## Self-Review Notes
 
-- **Spec coverage:** Manual trigger (Task 2 manifest — no `matches` auto-run of extraction, only passive listener), extraction + IDs (Tasks 3–5), backend + AI (Tasks 6–8), target-ID validation both server- and client-side (Tasks 8, 10), jump/highlight (Task 9), side panel + copy + loading/error (Task 11), caching + rate limiting (Task 8), privacy note (Task 2's side panel HTML), lightweight logging (Tasks 8, 10, 11 `console.log` calls). BYOK (spec §24) is explicitly out of scope per this plan's header.
+- **Spec coverage:** Manual trigger (Task 3 manifest — no `matches` auto-run of extraction, only passive listener), extraction + IDs (Tasks 4–6), backend + AI (Tasks 7–9), target-ID validation both server- and client-side via the shared `validateReadMap` (Tasks 9, 11), jump/highlight (Task 10), side panel + copy + loading/error (Task 12), caching + rate limiting (Task 9), privacy note (Task 3's side panel HTML), lightweight logging (Tasks 9, 11, 12 `console.log` calls). BYOK (spec §24) is explicitly out of scope per this plan's header.
 - **Placeholder scan:** No `TODO`/`TBD` left in any step; every code block is complete and runnable as written.
-- **Type consistency:** `StructuredPageContent`, `SectionContent`, `ParagraphContent`, `ReadMapResult`, `KeySection` are defined identically (by design, per the Task 6 Step 4 note) in `extension/src/shared/types.ts` and `backend/src/types.ts`, and every task that references them uses these exact names and shapes.
+- **Type consistency:** `StructuredPageContent`, `SectionContent`, `ParagraphContent`, `ReadMapResult`, `KeySection` are defined once, in `shared/src/types.ts`, and every task that references them imports from `ai-read-map-shared` using these exact names and shapes — no duplicate type definitions remain in either `extension` or `backend`.
+- **Duplication resolved:** `validateReadMap` exists once, in `shared/src/validate-read-map.ts`, called with two different `validTargetIds` sets (submitted content in Task 9, live DOM in Task 11) — no duplicated logic.
