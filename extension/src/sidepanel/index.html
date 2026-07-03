@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AI Read Map</title>
+  <link rel="stylesheet" href="./panel.css" />
+</head>
+<body>
+  <div id="app">
+    <h1>AI Read Map</h1>
+    <button id="generate-btn">Generate Read Map</button>
+    <div id="status"></div>
+    <div id="result"></div>
+    <details id="privacy-note">
+      <summary>Privacy</summary>
+      <p>
+        Page content is only read after you click "Generate Read Map." The
+        extracted text (not your browsing history) is sent to the AI Read Map
+        backend to generate the read map, then discarded except for a
+        short-lived cache keyed to this page's content. Remove the extension
+        at any time to stop all processing.
+      </p>
+    </details>
+  </div>
+  <script type="module" src="./panel.ts"></script>
+</body>
+</html>

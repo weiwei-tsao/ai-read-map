@@ -1,0 +1,6 @@
+body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; }
+#status.loading { color: #555; }
+#status.error { color: #b00020; }
+#result ol { padding-left: 20px; }
+#result li { margin-bottom: 12px; }
+#result button { margin-top: 4px; }
