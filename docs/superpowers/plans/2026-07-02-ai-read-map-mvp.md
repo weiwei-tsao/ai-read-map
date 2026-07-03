@@ -1107,6 +1107,33 @@ describe('generateReadMap', () => {
 
     await expect(generateReadMap(content)).rejects.toThrow('no text content')
   })
+
+  it('truncates keySections to 5 even if the model returns more', async () => {
+    const sixSections = Array.from({ length: 6 }, (_, i) => ({
+      label: `Section ${i}`,
+      whyRead: 'why',
+      targetId: `p${i}`,
+    }))
+    mockCreate.mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: 'ok',
+            overview: 'x',
+            keySections: sixSections,
+            pageQuality: 'high',
+            missingContext: [],
+            reason: '',
+          }),
+        },
+      ],
+    })
+
+    const result = await generateReadMap(content)
+
+    expect(result.keySections).toHaveLength(5)
+  })
 })
 ```
 
@@ -1141,7 +1168,12 @@ const READMAP_SCHEMA = {
         required: ['label', 'whyRead', 'targetId'],
         additionalProperties: false,
       },
-    },
+    }, // Note: Anthropic's structured-outputs JSON schema subset does not
+       // support array-length constraints (minItems/maxItems), so the 2-5
+       // bound cannot be enforced here — the prompt asks for it, and the
+       // code below enforces the max defensively; validateReadMap
+       // (shared package) enforces the min by downgrading to
+       // low_confidence when fewer than 2 valid sections remain.
     pageQuality: { type: 'string', enum: ['high', 'medium', 'low'] },
     missingContext: { type: 'array', items: { type: 'string' } },
     reason: { type: 'string' },
@@ -1163,11 +1195,16 @@ export async function generateReadMap(content: StructuredPageContent): Promise<R
     throw new Error('AI response contained no text content')
   }
 
-  return JSON.parse(textBlock.text) as ReadMapResult
+  const parsed = JSON.parse(textBlock.text) as ReadMapResult
+
+  // The JSON schema above cannot express "max 5 items" (Anthropic's
+  // structured-outputs subset doesn't support minItems/maxItems), so the
+  // 2-5 upper bound is enforced here instead of at the schema level.
+  return { ...parsed, keySections: parsed.keySections.slice(0, 5) }
 }
 ```
 
-`output_config.format` with a JSON schema guarantees Claude's response is valid JSON matching this shape (structured outputs), so `JSON.parse` here cannot throw on malformed JSON — it can still throw if the API itself errors, which the route in Task 9 catches.
+`output_config.format` with a JSON schema guarantees Claude's response is valid JSON matching this shape (structured outputs), so `JSON.parse` here cannot throw on malformed JSON — it can still throw if the API itself errors, which the route in Task 9 catches. The slice above is what actually enforces the 2-5 section count's upper bound; the lower bound is enforced downstream by `validateReadMap` (Task 2).
 
 - [ ] **Step 5: Run the test to verify it passes**
 
