@@ -363,6 +363,7 @@ git commit -m "feat: add shared types and target-ID validation package"
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -388,7 +389,7 @@ git commit -m "feat: add shared types and target-ID validation package"
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["chrome", "vite/client"],
     "strict": true,
     "skipLibCheck": true,
@@ -397,6 +398,8 @@ git commit -m "feat: add shared types and target-ID validation package"
   "include": ["src"]
 }
 ```
+
+`DOM.Iterable` is required alongside `DOM` — without it, `NodeListOf<T>` (returned by `querySelectorAll`) has no `[Symbol.iterator]()`, and `for...of` over it fails to type-check (TS2488) even though Vite's build still succeeds, since `vite build` transpiles without type-checking. Run `npm run typecheck -w extension` (added to `package.json` above) to catch this class of error — `vite build` passing is not proof the code type-checks.
 
 - [ ] **Step 3: Create `extension/vitest.config.ts`**
 
