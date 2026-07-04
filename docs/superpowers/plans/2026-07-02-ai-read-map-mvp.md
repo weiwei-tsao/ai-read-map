@@ -1409,12 +1409,25 @@ import type { StructuredPageContent } from 'ai-read-map-shared'
 
 const MAX_CONTENT_CHARS = 50_000
 
+function isValidSections(sections: unknown): sections is StructuredPageContent['sections'] {
+  return (
+    Array.isArray(sections) &&
+    sections.every(
+      (s) =>
+        s &&
+        typeof s.id === 'string' &&
+        Array.isArray(s.paragraphs) &&
+        s.paragraphs.every((p: unknown) => p && typeof (p as { id?: unknown }).id === 'string' && typeof (p as { text?: unknown }).text === 'string'),
+    )
+  )
+}
+
 export const readmapRouter = Router()
 
 readmapRouter.post('/readmap', async (req, res) => {
   const content = req.body as StructuredPageContent
 
-  if (!content || !Array.isArray(content.sections)) {
+  if (!content || !isValidSections(content.sections)) {
     return res.status(400).json({ status: 'not_suitable', overview: '', keySections: [], pageQuality: 'low', missingContext: [], reason: 'Invalid request body' })
   }
 
