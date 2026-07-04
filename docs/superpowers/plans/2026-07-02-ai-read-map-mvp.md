@@ -931,7 +931,7 @@ git commit -m "feat: add extraction quality checks per MVP minimums"
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.35.0",
+    "@anthropic-ai/sdk": "^0.110.0",
     "ai-read-map-shared": "*",
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0"
@@ -1077,7 +1077,7 @@ Mocking the SDK isolates this test to *our* request shape and response parsing â
 // backend/src/services/anthropic-client.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockCreate = vi.fn()
+const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
