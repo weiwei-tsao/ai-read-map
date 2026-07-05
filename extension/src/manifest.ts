@@ -6,6 +6,7 @@ export default defineManifest({
   version: '0.1.0',
   description: 'Turn long webpages into a clickable map of key sections.',
   permissions: ['activeTab', 'scripting', 'storage', 'sidePanel'],
+  host_permissions: ['http://localhost:8787/*'],
   background: {
     service_worker: 'src/background/service-worker.ts',
     type: 'module',

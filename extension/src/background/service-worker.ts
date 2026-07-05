@@ -22,16 +22,14 @@ async function handleGenerate(): Promise<
   console.log('[ai-read-map] read_map_requested')
   try {
     const tab = await getActiveTab()
-    const { content, quality } = await chrome.tabs.sendMessage(tab.id!, { type: 'EXTRACT_PAGE' })
+    const { content, quality, domTargetIds } = await chrome.tabs.sendMessage(tab.id!, { type: 'EXTRACT_PAGE' })
 
     if (!quality.passed) {
       return { ok: false, error: quality.reason }
     }
 
     const rawReadMap = await requestReadMap(content as StructuredPageContent)
-    const validTargetIds = new Set(
-      (content as StructuredPageContent).sections.flatMap((s) => [s.id, ...s.paragraphs.map((p) => p.id)]),
-    )
+    const validTargetIds = new Set(domTargetIds as string[])
     const readMap = validateReadMap(rawReadMap, validTargetIds)
 
     return { ok: true, readMap, title: content.title, url: content.url }
@@ -58,7 +56,11 @@ async function requestReadMap(content: StructuredPageContent): Promise<ReadMapRe
     body: JSON.stringify(content),
   })
   if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`)
+    const reason = await response
+      .json()
+      .then((body) => body?.reason)
+      .catch(() => undefined)
+    throw new Error(reason ?? `Backend error: ${response.status}`)
   }
   return response.json()
 }

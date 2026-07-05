@@ -14,6 +14,11 @@ async function onGenerate(): Promise<void> {
   const response = await chrome.runtime.sendMessage({ type: 'GENERATE_READMAP' })
   generateBtn.disabled = false
 
+  if (!response) {
+    setStatus('Something went wrong.', 'error')
+    return
+  }
+
   if (!response.ok) {
     setStatus(response.error ?? 'Something went wrong.', 'error')
     return

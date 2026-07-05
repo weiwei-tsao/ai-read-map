@@ -3,13 +3,14 @@ import { checkExtractionQuality } from './quality-check'
 
 let lastIdToNode: Map<string, HTMLElement> | null = null
 let highlightTimeout: number | undefined
+let currentlyHighlightedNode: HTMLElement | null = null
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'EXTRACT_PAGE') {
     const content = extractStructuredContent(document)
     lastIdToNode = collectIdToNode()
     const quality = checkExtractionQuality(content)
-    sendResponse({ content, quality })
+    sendResponse({ content, quality, domTargetIds: Array.from(lastIdToNode.keys()) })
     return
   }
 
@@ -34,14 +35,21 @@ function jumpToParagraph(targetId: string): void {
 
   node.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
+  window.clearTimeout(highlightTimeout)
+  if (currentlyHighlightedNode && currentlyHighlightedNode !== node) {
+    currentlyHighlightedNode.style.backgroundColor = ''
+    currentlyHighlightedNode.style.transition = ''
+  }
+
   const originalBackground = node.style.backgroundColor
   const originalTransition = node.style.transition
   node.style.transition = 'background-color 0.3s ease'
   node.style.backgroundColor = '#fff3b0'
+  currentlyHighlightedNode = node
 
-  window.clearTimeout(highlightTimeout)
   highlightTimeout = window.setTimeout(() => {
     node.style.backgroundColor = originalBackground
     node.style.transition = originalTransition
+    currentlyHighlightedNode = null
   }, 2000)
 }
