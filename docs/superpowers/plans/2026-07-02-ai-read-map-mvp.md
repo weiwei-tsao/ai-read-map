@@ -422,6 +422,7 @@ export default defineManifest({
   version: '0.1.0',
   description: 'Turn long webpages into a clickable map of key sections.',
   permissions: ['activeTab', 'scripting', 'storage', 'sidePanel'],
+  host_permissions: ['http://localhost:8787/*'],
   background: {
     service_worker: 'src/background/service-worker.ts',
     type: 'module',
@@ -429,6 +430,10 @@ export default defineManifest({
   side_panel: {
     default_path: 'src/sidepanel/index.html',
   },
+  // host_permissions above is required for the background service worker's
+  // fetch() to the backend to bypass CORS in MV3 (extension-page fetches to
+  // origins outside host_permissions are subject to normal CORS rules, and
+  // the Express backend sends no CORS headers).
   // ponytail: broad host match here (not just activeTab) so the content
   // script's message listener is always present; the script itself stays
   // passive until EXTRACT_PAGE arrives (see Task 10's src/content/index.ts),
@@ -1527,7 +1532,7 @@ git commit -m "feat: add read map endpoint with caching, validation, and rate li
 
 **Interfaces:**
 - Consumes: `extractStructuredContent` (Task 5), `checkExtractionQuality` (Task 6).
-- Produces: content script responding to `chrome.runtime` messages `EXTRACT_PAGE` (returns `{ content, quality }`) and `JUMP_TO_PARAGRAPH` (scrolls and highlights). Consumed by Task 11's background worker.
+- Produces: content script responding to `chrome.runtime` messages `EXTRACT_PAGE` (returns `{ content, quality, domTargetIds }`, where `domTargetIds` is the live-DOM id set — the genuine gate for Task 11's extension-side validation) and `JUMP_TO_PARAGRAPH` (scrolls and highlights). Consumed by Task 11's background worker.
 
 - [ ] **Step 1: Create `extension/src/content/index.ts`**
 
@@ -1537,13 +1542,14 @@ import { checkExtractionQuality } from './quality-check'
 
 let lastIdToNode: Map<string, HTMLElement> | null = null
 let highlightTimeout: number | undefined
+let currentlyHighlightedNode: HTMLElement | null = null
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'EXTRACT_PAGE') {
     const content = extractStructuredContent(document)
     lastIdToNode = collectIdToNode()
     const quality = checkExtractionQuality(content)
-    sendResponse({ content, quality })
+    sendResponse({ content, quality, domTargetIds: Array.from(lastIdToNode.keys()) })
     return
   }
 
@@ -1568,18 +1574,27 @@ function jumpToParagraph(targetId: string): void {
 
   node.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
+  window.clearTimeout(highlightTimeout)
+  if (currentlyHighlightedNode && currentlyHighlightedNode !== node) {
+    currentlyHighlightedNode.style.backgroundColor = ''
+    currentlyHighlightedNode.style.transition = ''
+  }
+
   const originalBackground = node.style.backgroundColor
   const originalTransition = node.style.transition
   node.style.transition = 'background-color 0.3s ease'
   node.style.backgroundColor = '#fff3b0'
+  currentlyHighlightedNode = node
 
-  window.clearTimeout(highlightTimeout)
   highlightTimeout = window.setTimeout(() => {
     node.style.backgroundColor = originalBackground
     node.style.transition = originalTransition
+    currentlyHighlightedNode = null
   }, 2000)
 }
 ```
+
+Note: tracking `currentlyHighlightedNode` separately from the pending `highlightTimeout` ensures that if the user jumps to a different section before the previous highlight's 2-second timeout fires, the previous node is reverted immediately instead of being orphaned in its highlighted state.
 
 Note: `extractStructuredContent` already calls `assignParagraphIds` internally (Task 5), so `collectIdToNode` here just re-queries the now-tagged DOM rather than re-deriving IDs — this keeps a single source of truth for ID assignment.
 
@@ -1640,16 +1655,14 @@ async function handleGenerate(): Promise<
   console.log('[ai-read-map] read_map_requested')
   try {
     const tab = await getActiveTab()
-    const { content, quality } = await chrome.tabs.sendMessage(tab.id!, { type: 'EXTRACT_PAGE' })
+    const { content, quality, domTargetIds } = await chrome.tabs.sendMessage(tab.id!, { type: 'EXTRACT_PAGE' })
 
     if (!quality.passed) {
       return { ok: false, error: quality.reason }
     }
 
     const rawReadMap = await requestReadMap(content as StructuredPageContent)
-    const validTargetIds = new Set(
-      (content as StructuredPageContent).sections.flatMap((s) => [s.id, ...s.paragraphs.map((p) => p.id)]),
-    )
+    const validTargetIds = new Set(domTargetIds as string[])
     const readMap = validateReadMap(rawReadMap, validTargetIds)
 
     return { ok: true, readMap, title: content.title, url: content.url }
@@ -1676,7 +1689,11 @@ async function requestReadMap(content: StructuredPageContent): Promise<ReadMapRe
     body: JSON.stringify(content),
   })
   if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`)
+    const reason = await response
+      .json()
+      .then((body) => body?.reason)
+      .catch(() => undefined)
+    throw new Error(reason ?? `Backend error: ${response.status}`)
   }
   return response.json()
 }
@@ -1721,6 +1738,11 @@ async function onGenerate(): Promise<void> {
 
   const response = await chrome.runtime.sendMessage({ type: 'GENERATE_READMAP' })
   generateBtn.disabled = false
+
+  if (!response) {
+    setStatus('Something went wrong.', 'error')
+    return
+  }
 
   if (!response.ok) {
     setStatus(response.error ?? 'Something went wrong.', 'error')
