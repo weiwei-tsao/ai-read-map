@@ -16,7 +16,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })
 
-async function handleGenerate(): Promise<{ ok: true; readMap: ReadMapResult } | { ok: false; error: string }> {
+async function handleGenerate(): Promise<
+  { ok: true; readMap: ReadMapResult; title: string; url: string } | { ok: false; error: string }
+> {
   console.log('[ai-read-map] read_map_requested')
   try {
     const tab = await getActiveTab()
@@ -32,7 +34,7 @@ async function handleGenerate(): Promise<{ ok: true; readMap: ReadMapResult } | 
     )
     const readMap = validateReadMap(rawReadMap, validTargetIds)
 
-    return { ok: true, readMap }
+    return { ok: true, readMap, title: content.title, url: content.url }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
