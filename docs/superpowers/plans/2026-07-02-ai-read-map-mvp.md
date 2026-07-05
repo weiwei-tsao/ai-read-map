@@ -1611,7 +1611,7 @@ git commit -m "feat: wire content script extraction and jump/highlight messaging
 
 **Interfaces:**
 - Consumes: `StructuredPageContent`, `ReadMapResult`, `validateReadMap` from `ai-read-map-shared` (Task 2).
-- Produces: `chrome.runtime` message handler for `GENERATE_READMAP` (returns `{ ok: true, readMap } | { ok: false, error }`) and forwards `JUMP_TO_PARAGRAPH` to the active tab. Consumed by Task 12's side panel.
+- Produces: `chrome.runtime` message handler for `GENERATE_READMAP` (returns `{ ok: true, readMap, title, url } | { ok: false, error }`) and forwards `JUMP_TO_PARAGRAPH` to the active tab. Consumed by Task 12's side panel.
 
 - [ ] **Step 1: Replace `extension/src/background/service-worker.ts`**
 
@@ -1634,7 +1634,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })
 
-async function handleGenerate(): Promise<{ ok: true; readMap: ReadMapResult } | { ok: false; error: string }> {
+async function handleGenerate(): Promise<
+  { ok: true; readMap: ReadMapResult; title: string; url: string } | { ok: false; error: string }
+> {
   console.log('[ai-read-map] read_map_requested')
   try {
     const tab = await getActiveTab()
@@ -1650,7 +1652,7 @@ async function handleGenerate(): Promise<{ ok: true; readMap: ReadMapResult } | 
     )
     const readMap = validateReadMap(rawReadMap, validTargetIds)
 
-    return { ok: true, readMap }
+    return { ok: true, readMap, title: content.title, url: content.url }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
@@ -1725,7 +1727,7 @@ async function onGenerate(): Promise<void> {
     return
   }
 
-  renderReadMap(response.readMap)
+  renderReadMap(response.readMap, response.title, response.url)
 }
 
 function setStatus(text: string, kind: 'loading' | 'error' | 'idle'): void {
@@ -1733,7 +1735,7 @@ function setStatus(text: string, kind: 'loading' | 'error' | 'idle'): void {
   statusEl.className = kind
 }
 
-function renderReadMap(readMap: ReadMapResult): void {
+function renderReadMap(readMap: ReadMapResult, title: string, url: string): void {
   if (readMap.status === 'not_suitable') {
     setStatus(readMap.reason || "We couldn't find enough readable content on this page.", 'error')
     return
@@ -1779,13 +1781,16 @@ function renderReadMap(readMap: ReadMapResult): void {
 
   const copyBtn = document.createElement('button')
   copyBtn.textContent = 'Copy Read Map'
-  copyBtn.addEventListener('click', () => copyReadMap(readMap))
+  copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
   resultEl.appendChild(copyBtn)
 }
 
-async function copyReadMap(readMap: ReadMapResult): Promise<void> {
+async function copyReadMap(readMap: ReadMapResult, title: string, url: string): Promise<void> {
   console.log('[ai-read-map] copy_clicked')
   const lines = [
+    `Title: ${title}`,
+    `URL: ${url}`,
+    '',
     `Overview:\n${readMap.overview}`,
     '',
     'Key Sections:',
