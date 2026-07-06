@@ -32,7 +32,7 @@ function setStatus(text: string, kind: 'loading' | 'error' | 'idle'): void {
   statusEl.className = kind
 }
 
-function renderReadMap(readMap: ReadMapResult, title: string, url: string): void {
+export function renderReadMap(readMap: ReadMapResult, title: string, url: string): void {
   if (readMap.status === 'not_suitable') {
     setStatus(readMap.reason || "We couldn't find enough readable content on this page.", 'error')
     return
@@ -45,22 +45,33 @@ function renderReadMap(readMap: ReadMapResult, title: string, url: string): void
   }
 
   const overviewEl = document.createElement('p')
+  overviewEl.className = 'overview'
   overviewEl.textContent = readMap.overview
   resultEl.appendChild(overviewEl)
 
+  const eyebrowEl = document.createElement('div')
+  eyebrowEl.className = 'eyebrow'
+  eyebrowEl.textContent = 'Key Sections'
+  resultEl.appendChild(eyebrowEl)
+
   const list = document.createElement('ol')
+  list.className = 'section-list'
   for (const section of readMap.keySections) {
     const item = document.createElement('li')
+    item.className = 'section-card'
 
     const label = document.createElement('strong')
+    label.className = 'section-label'
     label.textContent = section.label
     item.appendChild(label)
 
     const why = document.createElement('p')
+    why.className = 'section-why'
     why.textContent = section.whyRead
     item.appendChild(why)
 
     const jumpBtn = document.createElement('button')
+    jumpBtn.className = 'btn btn--ghost'
     jumpBtn.textContent = 'Jump'
     jumpBtn.addEventListener('click', () => {
       console.log('[ai-read-map] jump_clicked')
@@ -72,11 +83,13 @@ function renderReadMap(readMap: ReadMapResult, title: string, url: string): void
   }
   resultEl.appendChild(list)
 
-  const qualityEl = document.createElement('p')
-  qualityEl.textContent = `Page quality: ${readMap.pageQuality}`
-  resultEl.appendChild(qualityEl)
+  const qualityChip = document.createElement('span')
+  qualityChip.className = `chip chip--${readMap.pageQuality}`
+  qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
+  resultEl.appendChild(qualityChip)
 
   const copyBtn = document.createElement('button')
+  copyBtn.className = 'btn btn--secondary'
   copyBtn.textContent = 'Copy Read Map'
   copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
   resultEl.appendChild(copyBtn)
