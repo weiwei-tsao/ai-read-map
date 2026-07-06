@@ -8,7 +8,7 @@
   --surface: #FFFFFF;
   --border: #E7E1D5;
   --accent: #996136;
-  --accent-sage: #6B8F71;
+  --accent-sage: #6B8F71; /* ponytail: placeholder — source spec never specified a sage hex, swap here if a real value lands */
 
   /* type */
   --font-serif: 'Source Serif 4', Georgia, serif;
