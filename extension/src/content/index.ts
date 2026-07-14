@@ -6,6 +6,11 @@ let highlightTimeout: number | undefined
 let currentlyHighlightedNode: HTMLElement | null = null
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'PING_CONTENT_SCRIPT') {
+    sendResponse({ ok: true })
+    return
+  }
+
   if (message.type === 'EXTRACT_PAGE') {
     const content = extractStructuredContent(document)
     lastIdToNode = collectIdToNode()

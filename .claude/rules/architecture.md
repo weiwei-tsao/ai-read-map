@@ -5,7 +5,7 @@
 - `shared/` — types (`types.ts`) and validation (`validate-read-map.ts`) only. No backend or extension code may duplicate these; both import from `ai-read-map-shared`.
 - `backend/src/routes/` — HTTP layer only (request parsing, response shaping). Business logic lives in `backend/src/services/`.
 - `backend/src/services/` — Anthropic calls, caching, content hashing, prompt construction. Must not import Express types.
-- `extension/src/content/` — runs in the page context (content script). Passive until it receives an `EXTRACT_PAGE` message — see `ponytail:` note in `manifest.ts` for why permissions are broader than `activeTab` right now.
+- `extension/src/content/` — runs in the page context (content script). Not declared in the manifest; the background worker injects it on demand via `chrome.scripting.executeScript` (`activeTab`) before sending `EXTRACT_PAGE`.
 - `extension/src/background/` — service worker, coordinates messaging between content script, side panel, and backend.
 - `extension/src/sidepanel/` — UI only; no direct Anthropic API calls, always goes through the backend.
 
@@ -22,6 +22,6 @@
 - Cache is a single in-process `Map` (`backend/src/services/cache.ts`) — do not assume it survives a restart or is shared across instances.
 - Cache key includes `promptVersion` (`services/prompt.ts`) — bump it when the prompt changes so stale cached results aren't served.
 - `MAX_CONTENT_CHARS` (50,000) in `routes/readmap.ts` truncates/limits page content sent to Anthropic — respect this boundary when changing extraction.
-- Extension manifest permissions are intentionally broad for the MVP phase (see `manifest.ts` `ponytail:` note) — don't silently narrow or widen without checking the spec.
+- Extension permissions are deliberately narrow: `activeTab` + on-demand `chrome.scripting.executeScript` injection, no static `content_scripts` (issue #5). Don't reintroduce broad host matches for normal product flows.
 
 Related: [api.md](./api.md) · [testing.md](./testing.md)

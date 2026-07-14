@@ -32,10 +32,6 @@ describe('extractStructuredContent', () => {
     // <p> -> ai-read-map-2. The nav <p> never gets an ID (excluded by
     // assignParagraphIds itself). Simulate Readability keeping only the
     // heading and the first paragraph.
-    //
-    // Note: the heading text must be >= 20 chars (assignParagraphIds'
-    // MIN_TEXT_LENGTH) or it gets filtered out like any other short node,
-    // which would shift every subsequent ID down by one.
     setParseResult(
       '<div data-ai-read-map-id="ai-read-map-0"></div><div data-ai-read-map-id="ai-read-map-1"></div>',
     )
@@ -47,6 +43,20 @@ describe('extractStructuredContent', () => {
     expect(result.sections[0].heading).toBe('Section One: An Overview')
     expect(result.sections[0].paragraphs).toHaveLength(1)
     expect(result.sections[0].paragraphs[0].text).toContain('First paragraph')
+  })
+
+  it('opens a section for a short Chinese heading and keeps it', () => {
+    document.body.innerHTML = `
+      <h2>实验方法</h2>
+      <p>这一段是足够长的正文内容，用来验证短中文标题仍然可以作为章节标题被完整保留下来。</p>
+    `
+    setParseResult(null)
+
+    const result = extractStructuredContent(document)
+
+    expect(result.sections).toHaveLength(1)
+    expect(result.sections[0].heading).toBe('实验方法')
+    expect(result.sections[0].paragraphs).toHaveLength(1)
   })
 
   it('falls back to every assigned ID when Readability finds nothing', () => {

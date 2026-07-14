@@ -94,16 +94,40 @@ body {
 }
 
 .section-card {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-4);
-  transition: box-shadow 0.15s ease;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .section-card:hover,
 .section-card:focus-within {
+  border-color: var(--accent);
   box-shadow: var(--shadow-card);
+}
+
+.section-card:hover .btn--ghost,
+.section-card:focus-within .btn--ghost {
+  color: var(--accent);
+}
+
+/* stretch the button's hit area over the whole card, so the card is
+   clickable through a single real button (one tab stop, no nested targets) */
+.section-card .btn--ghost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.section-card--active {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
 }
 
 .section-label {

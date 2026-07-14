@@ -11,6 +11,14 @@ async function onGenerate(): Promise<void> {
   resultEl.innerHTML = ''
   generateBtn.disabled = true
 
+  // must happen inside the click's user gesture, before any async round-trip.
+  // Reading the tab's URL to request a single origin would itself need the
+  // "tabs" permission, so ask for http/https once; denial falls back to the
+  // activeTab grant from the last extension-icon click.
+  await chrome.permissions
+    .request({ origins: ['http://*/*', 'https://*/*'] })
+    .catch(() => false)
+
   const response = await chrome.runtime.sendMessage({ type: 'GENERATE_READMAP' })
   generateBtn.disabled = false
 
@@ -70,12 +78,20 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     why.textContent = section.whyRead
     item.appendChild(why)
 
+    // whole-card click area comes from the button's ::after overlay in panel.css
     const jumpBtn = document.createElement('button')
     jumpBtn.className = 'btn btn--ghost'
-    jumpBtn.textContent = 'Jump'
+    jumpBtn.textContent = 'View in page'
     jumpBtn.addEventListener('click', () => {
-      console.log('[ai-read-map] jump_clicked')
-      chrome.runtime.sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
+      markSectionActive(item)
+      chrome.runtime
+        .sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
+        .then((response) => {
+          if (response?.ok === false) {
+            item.classList.remove('section-card--active')
+            setStatus(response.error ?? 'Something went wrong.', 'error')
+          }
+        })
     })
     item.appendChild(jumpBtn)
 
@@ -83,20 +99,42 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
   }
   resultEl.appendChild(list)
 
-  const qualityChip = document.createElement('span')
-  qualityChip.className = `chip chip--${readMap.pageQuality}`
-  qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
-  resultEl.appendChild(qualityChip)
+  if (isDebugMode()) {
+    const qualityChip = document.createElement('span')
+    qualityChip.className = `chip chip--${readMap.pageQuality}`
+    qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
+    resultEl.appendChild(qualityChip)
 
-  const copyBtn = document.createElement('button')
-  copyBtn.className = 'btn btn--secondary'
-  copyBtn.textContent = 'Copy Read Map'
-  copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
-  resultEl.appendChild(copyBtn)
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'btn btn--secondary'
+    copyBtn.textContent = 'Copy Read Map'
+    copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
+    resultEl.appendChild(copyBtn)
+  }
+}
+
+// matches the 2s page highlight in content/index.ts so both cues fade together
+export const SECTION_ACTIVE_MS = 2000
+
+let sectionActiveTimeout: number | undefined
+
+function markSectionActive(item: HTMLElement): void {
+  for (const el of document.querySelectorAll('.section-card--active')) {
+    el.classList.remove('section-card--active')
+  }
+  window.clearTimeout(sectionActiveTimeout)
+  item.classList.add('section-card--active')
+  sectionActiveTimeout = window.setTimeout(
+    () => item.classList.remove('section-card--active'),
+    SECTION_ACTIVE_MS,
+  )
+}
+
+function isDebugMode(): boolean {
+  return window.localStorage.getItem('ai-read-map:debug') === 'true'
 }
 
 async function copyReadMap(readMap: ReadMapResult, title: string, url: string): Promise<void> {
-  console.log('[ai-read-map] copy_clicked')
   const lines = [
     `Title: ${title}`,
     `URL: ${url}`,

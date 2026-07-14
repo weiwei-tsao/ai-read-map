@@ -28,7 +28,7 @@ Data flow: extension content script extracts page content → side panel/backgro
 
 The in-memory cache is single-process and does not survive restarts — see the `ponytail:` note in `backend/src/services/cache.ts`.
 
-The extension's `manifest.ts` currently uses broad host permissions (`http://*/*`, `https://*/*`) rather than `activeTab`-only, as a deliberate MVP tradeoff (see the `ponytail:` note there) — narrow this before a public/store release.
+The extension uses `activeTab` plus `chrome.scripting.executeScript` to inject the content script only after the user triggers read-map generation from the side panel. Keep host permissions narrow; broad `http://*/*` or `https://*/*` content-script matches should not be reintroduced for normal product flows.
 
 @.claude/rules/git.md
 @.claude/rules/architecture.md
