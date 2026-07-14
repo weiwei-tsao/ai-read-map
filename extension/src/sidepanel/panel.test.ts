@@ -29,20 +29,23 @@ beforeAll(async () => {
 
 beforeEach(() => {
   document.querySelector('#result')!.innerHTML = ''
+  window.localStorage.clear()
 })
 
 describe('renderReadMap', () => {
-  it('renders a sage-variant chip for high page quality', () => {
+  it('does not render page quality by default', () => {
     renderReadMap(baseResult({ pageQuality: 'high' }), 'Title', 'https://example.com')
-    const chip = document.querySelector('#result .chip')
-    expect(chip?.classList.contains('chip--high')).toBe(true)
+    expect(document.querySelector('#result .chip')).toBeNull()
+    expect(document.querySelector('#result')?.textContent).not.toContain('Page quality')
   })
 
-  it('renders a neutral-variant chip for medium page quality', () => {
+  it('renders page quality in debug mode', () => {
+    window.localStorage.setItem('ai-read-map:debug', 'true')
     renderReadMap(baseResult({ pageQuality: 'medium' }), 'Title', 'https://example.com')
     const chip = document.querySelector('#result .chip')
     expect(chip?.classList.contains('chip--medium')).toBe(true)
     expect(chip?.classList.contains('chip--high')).toBe(false)
+    expect(chip?.textContent).toBe('Page quality: medium')
   })
 
   it('renders one section-card per key section', () => {

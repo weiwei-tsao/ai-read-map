@@ -83,16 +83,22 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
   }
   resultEl.appendChild(list)
 
-  const qualityChip = document.createElement('span')
-  qualityChip.className = `chip chip--${readMap.pageQuality}`
-  qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
-  resultEl.appendChild(qualityChip)
+  if (isDebugMode()) {
+    const qualityChip = document.createElement('span')
+    qualityChip.className = `chip chip--${readMap.pageQuality}`
+    qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
+    resultEl.appendChild(qualityChip)
+  }
 
   const copyBtn = document.createElement('button')
   copyBtn.className = 'btn btn--secondary'
   copyBtn.textContent = 'Copy Read Map'
   copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
   resultEl.appendChild(copyBtn)
+}
+
+function isDebugMode(): boolean {
+  return window.localStorage.getItem('ai-read-map:debug') === 'true'
 }
 
 async function copyReadMap(readMap: ReadMapResult, title: string, url: string): Promise<void> {
