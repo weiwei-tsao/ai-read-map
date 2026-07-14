@@ -66,6 +66,11 @@ async function ensureContentScriptInjected(tabId: number): Promise<void> {
   await chrome.scripting.executeScript({
     target: { tabId },
     files: [CONTENT_SCRIPT_FILE],
+  }).catch(() => {
+    // no host grant and no live activeTab grant for this page
+    throw new Error(
+      'AI Read Map is not allowed to read this page. Click Generate again and allow access, or click the extension icon on this page first.',
+    )
   })
 }
 

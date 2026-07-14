@@ -11,6 +11,14 @@ async function onGenerate(): Promise<void> {
   resultEl.innerHTML = ''
   generateBtn.disabled = true
 
+  // must happen inside the click's user gesture, before any async round-trip.
+  // Reading the tab's URL to request a single origin would itself need the
+  // "tabs" permission, so ask for http/https once; denial falls back to the
+  // activeTab grant from the last extension-icon click.
+  await chrome.permissions
+    .request({ origins: ['http://*/*', 'https://*/*'] })
+    .catch(() => false)
+
   const response = await chrome.runtime.sendMessage({ type: 'GENERATE_READMAP' })
   generateBtn.disabled = false
 
