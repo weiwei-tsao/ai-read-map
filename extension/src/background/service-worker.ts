@@ -21,7 +21,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function handleGenerate(): Promise<
   { ok: true; readMap: ReadMapResult; title: string; url: string } | { ok: false; error: string }
 > {
-  console.log('[ai-read-map] read_map_requested')
   try {
     const tab = await getActiveTab()
     await ensureContentScriptInjected(tab.id!)

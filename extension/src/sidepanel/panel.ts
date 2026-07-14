@@ -75,7 +75,6 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     jumpBtn.className = 'btn btn--ghost'
     jumpBtn.textContent = 'View in page'
     jumpBtn.addEventListener('click', () => {
-      console.log('[ai-read-map] jump_clicked')
       markSectionActive(item)
       chrome.runtime
         .sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
@@ -128,7 +127,6 @@ function isDebugMode(): boolean {
 }
 
 async function copyReadMap(readMap: ReadMapResult, title: string, url: string): Promise<void> {
-  console.log('[ai-read-map] copy_clicked')
   const lines = [
     `Title: ${title}`,
     `URL: ${url}`,
