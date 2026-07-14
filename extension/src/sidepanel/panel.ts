@@ -70,12 +70,14 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     why.textContent = section.whyRead
     item.appendChild(why)
 
+    // whole-card click area comes from the button's ::after overlay in panel.css
     const jumpBtn = document.createElement('button')
     jumpBtn.className = 'btn btn--ghost'
-    jumpBtn.textContent = 'Jump'
+    jumpBtn.textContent = 'View in page'
     jumpBtn.addEventListener('click', () => {
       console.log('[ai-read-map] jump_clicked')
       chrome.runtime.sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
+      markSectionActive(item)
     })
     item.appendChild(jumpBtn)
 
@@ -95,6 +97,23 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
     resultEl.appendChild(copyBtn)
   }
+}
+
+// matches the 2s page highlight in content/index.ts so both cues fade together
+export const SECTION_ACTIVE_MS = 2000
+
+let sectionActiveTimeout: number | undefined
+
+function markSectionActive(item: HTMLElement): void {
+  for (const el of document.querySelectorAll('.section-card--active')) {
+    el.classList.remove('section-card--active')
+  }
+  window.clearTimeout(sectionActiveTimeout)
+  item.classList.add('section-card--active')
+  sectionActiveTimeout = window.setTimeout(
+    () => item.classList.remove('section-card--active'),
+    SECTION_ACTIVE_MS,
+  )
 }
 
 function isDebugMode(): boolean {
