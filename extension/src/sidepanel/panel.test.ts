@@ -37,15 +37,17 @@ describe('renderReadMap', () => {
     renderReadMap(baseResult({ pageQuality: 'high' }), 'Title', 'https://example.com')
     expect(document.querySelector('#result .chip')).toBeNull()
     expect(document.querySelector('#result')?.textContent).not.toContain('Page quality')
+    expect(document.querySelector('#result')?.textContent).not.toContain('Copy Read Map')
   })
 
-  it('renders page quality in debug mode', () => {
+  it('renders debug-only controls in debug mode', () => {
     window.localStorage.setItem('ai-read-map:debug', 'true')
     renderReadMap(baseResult({ pageQuality: 'medium' }), 'Title', 'https://example.com')
     const chip = document.querySelector('#result .chip')
     expect(chip?.classList.contains('chip--medium')).toBe(true)
     expect(chip?.classList.contains('chip--high')).toBe(false)
     expect(chip?.textContent).toBe('Page quality: medium')
+    expect(document.querySelector('#result')?.textContent).toContain('Copy Read Map')
   })
 
   it('renders one section-card per key section', () => {

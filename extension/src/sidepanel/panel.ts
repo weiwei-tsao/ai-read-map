@@ -88,13 +88,13 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     qualityChip.className = `chip chip--${readMap.pageQuality}`
     qualityChip.textContent = `Page quality: ${readMap.pageQuality}`
     resultEl.appendChild(qualityChip)
-  }
 
-  const copyBtn = document.createElement('button')
-  copyBtn.className = 'btn btn--secondary'
-  copyBtn.textContent = 'Copy Read Map'
-  copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
-  resultEl.appendChild(copyBtn)
+    const copyBtn = document.createElement('button')
+    copyBtn.className = 'btn btn--secondary'
+    copyBtn.textContent = 'Copy Read Map'
+    copyBtn.addEventListener('click', () => copyReadMap(readMap, title, url))
+    resultEl.appendChild(copyBtn)
+  }
 }
 
 function isDebugMode(): boolean {
