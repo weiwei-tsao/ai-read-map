@@ -76,8 +76,15 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     jumpBtn.textContent = 'View in page'
     jumpBtn.addEventListener('click', () => {
       console.log('[ai-read-map] jump_clicked')
-      chrome.runtime.sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
       markSectionActive(item)
+      chrome.runtime
+        .sendMessage({ type: 'JUMP_TO_PARAGRAPH', targetId: section.targetId })
+        .then((response) => {
+          if (response?.ok === false) {
+            item.classList.remove('section-card--active')
+            setStatus(response.error ?? 'Something went wrong.', 'error')
+          }
+        })
     })
     item.appendChild(jumpBtn)
 

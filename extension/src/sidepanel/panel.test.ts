@@ -21,7 +21,7 @@ let SECTION_ACTIVE_MS: typeof import('./panel').SECTION_ACTIVE_MS
 let sendMessage: ReturnType<typeof vi.fn>
 
 beforeAll(async () => {
-  sendMessage = vi.fn()
+  sendMessage = vi.fn().mockResolvedValue(undefined)
   vi.stubGlobal('chrome', {
     runtime: {
       sendMessage,
@@ -39,6 +39,7 @@ beforeEach(() => {
   document.querySelector('#result')!.innerHTML = ''
   window.localStorage.clear()
   sendMessage.mockClear()
+  sendMessage.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -109,5 +110,17 @@ describe('renderReadMap', () => {
 
     vi.advanceTimersByTime(SECTION_ACTIVE_MS / 2)
     expect(cards[1].classList.contains('section-card--active')).toBe(false)
+  })
+
+  it('shows an error and clears the active card when the jump fails', async () => {
+    sendMessage.mockResolvedValueOnce({ ok: false, error: 'The page has changed.' })
+    renderReadMap(baseResult(), 'Title', 'https://example.com')
+
+    const card = document.querySelector<HTMLElement>('#result .section-card')!
+    card.querySelector<HTMLButtonElement>('.btn--ghost')!.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(card.classList.contains('section-card--active')).toBe(false)
+    expect(document.querySelector('#status')?.textContent).toBe('The page has changed.')
   })
 })
