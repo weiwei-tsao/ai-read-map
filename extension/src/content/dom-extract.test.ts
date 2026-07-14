@@ -15,6 +15,21 @@ describe('assignParagraphIds', () => {
     expect(document.querySelector('p')?.getAttribute('data-ai-read-map-id')).toBeTruthy()
   })
 
+  it('keeps short headings but blocks empty and single-character ones', () => {
+    document.body.innerHTML = `
+      <h2>FAQ</h2>
+      <h3>结论</h3>
+      <h4>*</h4>
+      <h4>  </h4>
+      <p>This paragraph is long enough and outside any excluded container, so it counts.</p>
+    `
+    const idToNode = assignParagraphIds(document)
+    expect(idToNode.size).toBe(3)
+    expect(document.querySelector('h2')?.getAttribute('data-ai-read-map-id')).toBeTruthy()
+    expect(document.querySelector('h3')?.getAttribute('data-ai-read-map-id')).toBeTruthy()
+    expect(document.querySelector('h4')?.getAttribute('data-ai-read-map-id')).toBeNull()
+  })
+
   it('skips short text and nav/footer/aside/form content', () => {
     document.body.innerHTML = `
       <p>short</p>
