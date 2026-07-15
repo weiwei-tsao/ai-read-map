@@ -6,8 +6,8 @@ function baseResult(overrides: Partial<ReadMapResult> = {}): ReadMapResult {
     status: 'ok',
     overview: 'This page explains X.',
     keySections: [
-      { label: 'Intro', whyRead: 'Sets up the problem', targetId: 'p1' },
-      { label: 'Method', whyRead: 'Describes the approach', targetId: 'p2' },
+      { label: 'Intro', preview: 'Sets up the problem', targetId: 'p1' },
+      { label: 'Method', preview: 'Describes the approach', targetId: 'p2' },
     ],
     pageQuality: 'high',
     missingContext: [],

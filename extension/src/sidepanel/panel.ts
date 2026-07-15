@@ -73,10 +73,10 @@ export function renderReadMap(readMap: ReadMapResult, title: string, url: string
     label.textContent = section.label
     item.appendChild(label)
 
-    const why = document.createElement('p')
-    why.className = 'section-why'
-    why.textContent = section.whyRead
-    item.appendChild(why)
+    const preview = document.createElement('p')
+    preview.className = 'section-preview'
+    preview.textContent = section.preview
+    item.appendChild(preview)
 
     // whole-card click area comes from the button's ::after overlay in panel.css
     const jumpBtn = document.createElement('button')
@@ -142,7 +142,7 @@ async function copyReadMap(readMap: ReadMapResult, title: string, url: string): 
     `Overview:\n${readMap.overview}`,
     '',
     'Key Sections:',
-    ...readMap.keySections.map((s, i) => `${i + 1}. ${s.label} — ${s.whyRead}`),
+    ...readMap.keySections.map((s, i) => `${i + 1}. ${s.label} — ${s.preview}`),
   ]
   await navigator.clipboard.writeText(lines.join('\n'))
 }

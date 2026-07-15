@@ -54,7 +54,7 @@ describe('generateReadMap', () => {
   it('truncates keySections to 5 even if the model returns more', async () => {
     const sixSections = Array.from({ length: 6 }, (_, i) => ({
       label: `Section ${i}`,
-      whyRead: 'why',
+      preview: 'why',
       targetId: `p${i}`,
     }))
     mockCreate.mockResolvedValue({

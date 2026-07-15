@@ -17,8 +17,8 @@ export interface StructuredPageContent {
 }
 
 export interface KeySection {
-  label: string
-  whyRead: string
+  label: string // the specific thing at that location, not an abstract theme
+  preview: string // what the reader will find there, citing a concrete detail
   targetId: string
 }
 
