@@ -15,10 +15,10 @@ const READMAP_SCHEMA = {
         type: 'object',
         properties: {
           label: { type: 'string' },
-          whyRead: { type: 'string' },
+          preview: { type: 'string' },
           targetId: { type: 'string' },
         },
-        required: ['label', 'whyRead', 'targetId'],
+        required: ['label', 'preview', 'targetId'],
         additionalProperties: false,
       },
     }, // Note: Anthropic's structured-outputs JSON schema subset does not

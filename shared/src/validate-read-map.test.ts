@@ -7,8 +7,8 @@ function makeResult(overrides: Partial<ReadMapResult> = {}): ReadMapResult {
     status: 'ok',
     overview: 'Overview',
     keySections: [
-      { label: 'A', whyRead: 'why', targetId: 'p1' },
-      { label: 'B', whyRead: 'why', targetId: 'p2' },
+      { label: 'A', preview: 'why', targetId: 'p1' },
+      { label: 'B', preview: 'why', targetId: 'p2' },
     ],
     pageQuality: 'high',
     missingContext: [],
@@ -28,9 +28,9 @@ describe('validateReadMap', () => {
     const result = validateReadMap(
       makeResult({
         keySections: [
-          { label: 'A', whyRead: 'why', targetId: 'p1' },
-          { label: 'Fake', whyRead: 'why', targetId: 'does-not-exist' },
-          { label: 'C', whyRead: 'why', targetId: 'p2' },
+          { label: 'A', preview: 'why', targetId: 'p1' },
+          { label: 'Fake', preview: 'why', targetId: 'does-not-exist' },
+          { label: 'C', preview: 'why', targetId: 'p2' },
         ],
       }),
       new Set(['p1', 'p2']),
@@ -42,8 +42,8 @@ describe('validateReadMap', () => {
     const result = validateReadMap(
       makeResult({
         keySections: [
-          { label: 'A', whyRead: 'why', targetId: 'p1' },
-          { label: 'A again', whyRead: 'why', targetId: 'p1' },
+          { label: 'A', preview: 'why', targetId: 'p1' },
+          { label: 'A again', preview: 'why', targetId: 'p1' },
         ],
       }),
       new Set(['p1']),
@@ -53,7 +53,7 @@ describe('validateReadMap', () => {
 
   it('downgrades to low_confidence when fewer than 2 valid sections remain', () => {
     const result = validateReadMap(
-      makeResult({ keySections: [{ label: 'A', whyRead: 'why', targetId: 'p1' }] }),
+      makeResult({ keySections: [{ label: 'A', preview: 'why', targetId: 'p1' }] }),
       new Set(['p1']),
     )
     expect(result.status).toBe('low_confidence')
