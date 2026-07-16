@@ -53,8 +53,9 @@ article, rewrite it with specifics from this page or drop the section.
 Avoid filler like "explains why this matters", "provides useful context",
 "explores the central idea".
 
-A preview points at the content; it must not fully state the section's
-conclusion — leave a reason to click.
+A preview may state the section's main claim, but must not reproduce the
+full explanation, evidence, or progression behind it. Give the reader
+enough to decide whether to read the section; do not replace it.
 
 Before returning, re-check every label and preview against the test above.
 ```
@@ -63,7 +64,8 @@ Before returning, re-check every label and preview against the test above.
 - 特异性判据只表述一次，事前规则与返回前自查共用同一句，避免两条措辞略异的规则。
 - 禁用短语只留 3 条作例证，不做长清单（模型会绕开清单继续空泛，判据才是防线）。
 - "信息不足就不选" 并入已有的 "Do not force weak sections"，不重复。
-- 防剧透规则保护 issue #4 的 jump 核心体验：preview 是路标不是摘要。
+- 边界规则：preview 可陈述该节的主张，但不复现完整论证/证据/推进过程 —— 支撑阅读
+  决策（包括"决定不读"）而非制造悬念；防止替代原文的硬防线是 20 词上限本身。
 - Rules 区 `whyRead must be under 20 words` → `preview must be under 20 words`，上限保留。
 
 ### 3. 配套

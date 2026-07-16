@@ -35,8 +35,9 @@ an unrelated article, rewrite it with specifics from this page or drop the
 section. Avoid filler like "explains why this matters", "provides useful
 context", "explores the central idea".
 
-A preview points at the content; it must not fully state the section's
-conclusion — leave a reason to click.
+A preview may state the section's main claim, but must not reproduce the
+full explanation, evidence, or progression behind it. Give the reader
+enough to decide whether to read the section; do not replace it.
 
 Before returning, re-check every label and preview against the test above.
 
