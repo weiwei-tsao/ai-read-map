@@ -21,7 +21,7 @@
 
 - Cache is a single in-process `Map` (`backend/src/services/cache.ts`) — do not assume it survives a restart or is shared across instances.
 - Cache key includes `promptVersion` (`services/prompt.ts`) — bump it when the prompt changes so stale cached results aren't served.
-- `MAX_CONTENT_CHARS` (50,000) in `routes/readmap.ts` truncates/limits page content sent to Anthropic — respect this boundary when changing extraction.
+- `MAX_CONTENT_CHARS` (50,000) in `routes/readmap.ts` rejects (`413`) requests whose combined paragraph text exceeds it, rather than truncating — respect this boundary when changing extraction.
 - Extension permissions are deliberately narrow: `activeTab` + on-demand `chrome.scripting.executeScript` injection, no static `content_scripts` (issue #5). Don't reintroduce broad host matches for normal product flows.
 
 Related: [api.md](./api.md) · [testing.md](./testing.md)

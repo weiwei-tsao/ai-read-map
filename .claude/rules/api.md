@@ -1,10 +1,11 @@
 # API Conventions
 
-Single-endpoint backend today (`backend/src/routes/readmap.ts`); follow these patterns as more endpoints are added.
+Single-endpoint backend today (`backend/src/routes/readmap.ts`, mounted under `/api` in `backend/src/index.ts`); follow these patterns as more endpoints are added.
 
 ## Endpoint shape
 
-- `POST /readmap` — body is `StructuredPageContent` (from `ai-read-map-shared`)
+- `POST /api/readmap` — body is `StructuredPageContent` (from `ai-read-map-shared`)
+- `GET /health` — liveness check, returns `{ status: 'ok' }`; not rate-limited
 - Response is always a `ReadMapResult`-shaped JSON object, even on error — callers can rely on `status`/`overview`/`keySections`/`pageQuality`/`missingContext` always being present. Don't return a bare error object.
 
 ## Status codes in use
@@ -16,7 +17,7 @@ Single-endpoint backend today (`backend/src/routes/readmap.ts`); follow these pa
 
 ## Auth
 
-None. No API key or session check on this endpoint — don't assume one exists when adding new routes; add explicit auth if a new endpoint needs it.
+None. No API key or session check on this endpoint — don't assume one exists when adding new routes; add explicit auth if a new endpoint needs it. `/api` routes are rate-limited (`express-rate-limit`, 20 requests/60s window, applied in `backend/src/index.ts`) but that's not a substitute for auth.
 
 ## Logging
 
