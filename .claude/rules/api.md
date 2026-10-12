@@ -4,14 +4,16 @@ Single-endpoint backend today (`backend/src/routes/readmap.ts`); follow these pa
 
 ## Endpoint shape
 
-- `POST /readmap` — body is `StructuredPageContent` (from `ai-read-map-shared`)
+- `POST /api/readmap` — the router defines `POST /readmap` (`routes/readmap.ts`) and `backend/src/index.ts` mounts it under `/api`; body is `StructuredPageContent` (from `ai-read-map-shared`)
 - Response is always a `ReadMapResult`-shaped JSON object, even on error — callers can rely on `status`/`overview`/`keySections`/`pageQuality`/`missingContext` always being present. Don't return a bare error object.
+- `GET /health` — unauthenticated liveness check, mounted outside the `/api` prefix, not behind the rate limiter.
 
 ## Status codes in use
 
 - `200` — success (cached or freshly generated)
 - `400` — invalid/malformed request body (fails `isValidSections`)
 - `413` — content exceeds `MAX_CONTENT_CHARS` (50,000)
+- `429` — rate limit exceeded (`express-rate-limit`, 20 requests/min per IP on the `/api` prefix)
 - `502` — Anthropic call or validation failed (`generateReadMap` / `validateReadMap` threw)
 
 ## Auth

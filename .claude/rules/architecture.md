@@ -11,7 +11,7 @@
 
 ## Data flow
 
-1. User triggers extraction → `extension/src/content/index.ts` (dispatches to `readability-extract.ts` / `dom-extract.ts`, gated by `quality-check.ts`)
+1. User triggers extraction → `extension/src/content/index.ts` calls `readability-extract.ts`, which tags paragraphs/headings via `dom-extract.ts`'s `assignParagraphIds` before running Readability; the result is gated by `quality-check.ts`
 2. Content script → background service worker → side panel
 3. Side panel/background → `POST` to backend `backend/src/routes/readmap.ts`
 4. Backend: `content-hash.ts` hashes the page → `cache.ts` checked → `anthropic-client.ts` called on a miss → response validated via `ai-read-map-shared`'s `validate-read-map.ts`
