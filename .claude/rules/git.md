@@ -23,7 +23,7 @@ Conventional Commits: `type(scope): description`
 
 - [ ] `npm test` passes (shared, extension, backend)
 - [ ] `npm run typecheck -w <workspace>` passes for every workspace touched
-- [ ] No `console.log` left in `backend/src` or `extension/src`
+- [ ] No stray debug `console.log`/`console.error` in `backend/src` or `extension/src` beyond the structured `[ai-read-map]` logging pattern (see [api.md](./api.md#logging))
 - [ ] No hardcoded values that should be env vars or config
 
 Related: [architecture.md](./architecture.md)

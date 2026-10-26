@@ -19,7 +19,7 @@ npm run dev:extension       # vite dev server for the extension
 npm run dev:backend         # tsx watch for the backend (loads backend/.env)
 npm run build:extension     # vite build
 npm test                    # runs shared, extension, backend test suites in order
-npm run typecheck -w <workspace>   # tsc --noEmit, per workspace (backend/extension/shared)
+npm run typecheck -w <workspace>   # tsc --noEmit, per workspace (backend/extension only — shared has no typecheck script)
 ```
 
 ## Architecture Notes
